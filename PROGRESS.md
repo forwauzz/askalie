@@ -4,8 +4,8 @@ Status values: `todo` | `in-progress` | `done` | `BLOCKED-ON-USER`.
 The loop updates this file every iteration. A packet is `done` only when its PLAN.md exit criteria pass.
 
 ## Phase 0 — Bootstrap
-- [ ] P0.1 Repo skeleton — todo
-- [ ] P0.2 Fixture generator — todo
+- [x] P0.1 Repo skeleton — done
+- [x] P0.2 Fixture generator — done
 
 ## Phase 1 — Workspace & models
 - [ ] P1.1 Core data models — todo
@@ -56,3 +56,5 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P0.1 + P0.2 done. Repo skeleton (pyproject, package layout per Spec §31 + llm/ and agents/runtime/ seams, CLI stubs, CLAUDE.md, .env.example), venv with dev deps, and synthetic French fixture PDFs (consultation, IRM, CNESST decision, blank/image-only/garbage pages). 4 tests green, ruff clean.
