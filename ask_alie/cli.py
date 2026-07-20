@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         from ask_alie.workspace.paths import CasePaths
 
         paths = CasePaths(root=Path(args.case))
-        specs = json.loads(Path(args.import_file).read_text(encoding="utf-8"))
+        specs = json.loads(Path(args.import_file).read_text(encoding="utf-8-sig"))
         units = create_units_from_specs(paths, specs)
         print(f"report map now has {len(units)} unit(s)")
         return 0

@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from ask_alie.serialization import AlieModel
-from ask_alie.workspace.jsonl import JsonlStore
 
 
 class GoldEvent(AlieModel):
@@ -20,5 +19,22 @@ class GoldEvent(AlieModel):
     key_facts: list[str] = []
 
 
+def _normalize_gold_record(raw: dict) -> dict:
+    """Accept the chrono-lab gold format (gold_event_id, date_iso, title, text)."""
+    record = dict(raw)
+    if "date" not in record and "date_iso" in record:
+        record["date"] = record["date_iso"]
+    if "description" not in record:
+        parts = [record.get("title"), record.get("text")]
+        record["description"] = " — ".join(p for p in parts if p)
+    return record
+
+
 def load_gold(path: Path) -> list[GoldEvent]:
-    return JsonlStore(path, GoldEvent).read_all()
+    import json
+
+    return [
+        GoldEvent.model_validate(_normalize_gold_record(json.loads(line)))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]

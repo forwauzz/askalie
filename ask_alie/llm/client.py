@@ -99,8 +99,14 @@ class ClaudeModelClient:
             max_turns=1,
             allowed_tools=[],
         )
+        full_prompt = (
+            request["prompt"]
+            + "\n\nReturn ONLY a single JSON object conforming to this JSON Schema - "
+            "no prose, no markdown fences:\n"
+            + json.dumps(request["output_format"]["schema"], ensure_ascii=False)
+        )
         result_text: str | None = None
-        async for message in query(prompt=request["prompt"], options=options):
+        async for message in query(prompt=full_prompt, options=options):
             if isinstance(message, ResultMessage):
                 result_text = message.result
         if result_text is None:

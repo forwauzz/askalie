@@ -1,5 +1,6 @@
 """Evaluation harness tests with hand-computed expectations (PLAN P5.1/P5.2)."""
 
+import json
 import re
 from pathlib import Path
 
@@ -116,6 +117,28 @@ def test_evaluate_case_writes_artifacts(tmp_path: Path, capsys) -> None:
     # re-running does not duplicate matches (file is rewritten)
     evaluate_case(paths, gold_path)
     assert len((paths.eval_dir / "matches.jsonl").read_text(encoding="utf-8").splitlines()) == 4
+
+
+def test_gold_loader_accepts_chrono_lab_format(tmp_path: Path) -> None:
+    from ask_alie.evals.gold import load_gold
+
+    gold_path = tmp_path / "gold.jsonl"
+    gold_path.write_text(
+        json.dumps(
+            {
+                "gold_event_id": "g1",
+                "date_iso": "2025-07-16",
+                "title": "Consultation",
+                "text": "Recrudescence de lombalgie.",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (event,) = load_gold(gold_path)
+    assert event.date == "2025-07-16"
+    assert "Consultation" in event.description and "lombalgie" in event.description
 
 
 def test_gold_isolation_guard() -> None:
