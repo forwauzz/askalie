@@ -18,9 +18,9 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P2.3 ingest CLI — done
 
 ## Phase 3 — Tokenization & privacy
-- [ ] P3.1 Date detection — todo
-- [ ] P3.2 Entity tokenization — todo
-- [ ] P3.3 Safe text + restoration — todo
+- [x] P3.1 Date detection — done
+- [x] P3.2 Entity tokenization — done
+- [x] P3.3 Safe text + restoration — done
 
 ## Phase 4 — Reader baseline (mock-first)
 - [ ] P4.1 Report map import — todo
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P3.1–P3.3 done. Date detection (fr/en textual, ISO, dmy with ambiguity confidence; 25 positive + 6 negative table cases incl. OCR-mangled never-mis-normalize), deterministic opaque date tokens + sequential entity tokens with save/load registries, regex recognizers (RAMQ/phone/email/postal/labeled claim) + per-case known-entities dictionary, safe-text builder with overlap resolution, tokenize CLI, date restoration with date_unresolved flag. Leak test proves no raw identifiers/dates survive in safe text. 56 tests green, ruff clean.
 
 - 2026-07-20 — P2.1–P2.3 done. Multi-signal quality scorer (Spec §12.3), PyMuPDF native extraction, page PNG rendering, OcrEngine seam (Tesseract subprocess / Null fallback), full ingest pipeline writing page records + raw text, `ingest` CLI with Step-1 summary. Fixture case: 8 pages → 5 native, 3 OCR-needed correctly flagged. 16 tests green + 1 skip (live Tesseract), ruff clean. Created NEEDS_FROM_USER.md (Tesseract, API key, Case 1 paths).
 

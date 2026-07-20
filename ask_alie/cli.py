@@ -14,6 +14,8 @@ COMMANDS: dict[str, str] = {
     "doctor": "Check environment prerequisites for live runs",
 }
 
+IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize"})
+
 # Packet that will replace each stub, per PLAN.md.
 _PENDING_PACKET = {
     "ingest": "P2.3",
@@ -38,6 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--input", required=True, help="Directory containing case PDFs")
             sub.add_argument("--case-id", required=True)
             sub.add_argument("--workspace", default=None, help="Workspace root (default: env/workspace)")
+        elif name == "tokenize":
+            sub.add_argument("--case", required=True, help="Case directory (workspace/cases/<id>)")
     return parser
 
 
@@ -62,5 +66,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "ingest":
         return _cmd_ingest(args)
+    if args.command == "tokenize":
+        from pathlib import Path
+
+        from ask_alie.privacy.tokenize import tokenize_case
+
+        print(tokenize_case(Path(args.case)).render())
+        return 0
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1

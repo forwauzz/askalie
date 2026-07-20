@@ -13,7 +13,9 @@ def test_help_lists_all_commands() -> None:
 
 
 def test_stub_commands_exit_nonzero() -> None:
-    from ask_alie.cli import main
+    from ask_alie.cli import IMPLEMENTED, main
 
-    assert main(["tokenize"]) == 1
+    stub_commands = set(COMMANDS) - set(IMPLEMENTED)
+    assert stub_commands, "all commands implemented: retire this test"
+    assert main([next(iter(sorted(stub_commands)))]) == 1
     assert main([]) == 0
