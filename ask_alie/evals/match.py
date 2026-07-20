@@ -14,8 +14,17 @@ from ask_alie.events.models import CandidateEvent
 from ask_alie.serialization import AlieModel
 
 _WORD = re.compile(r"[a-zà-ÿ]{3,}", re.IGNORECASE)
-_FULL_THRESHOLD = 0.5
-_PARTIAL_THRESHOLD = 0.25
+_FULL_THRESHOLD = 0.45
+_PARTIAL_THRESHOLD = 0.2
+
+_STOPWORDS = frozenset(
+    (
+        "les des une pour avec dans sur est sont aux par elle nous vous pas cette son ses "
+        "que qui été plus depuis suite date entre vers chez sous ainsi comme lors fait "
+        "faire être avoir aussi sans mais donc car tout tous toute toutes autre autres "
+        "the and for with was this that from"
+    ).split()
+)
 
 
 class MatchRecord(AlieModel):
@@ -29,21 +38,25 @@ class MatchRecord(AlieModel):
 
 
 def _words(text: str) -> set[str]:
-    return {w.lower() for w in _WORD.findall(text)}
+    return {w.lower() for w in _WORD.findall(text) if w.lower() not in _STOPWORDS}
 
 
 def _similarity(gold: GoldEvent, candidate: CandidateEvent) -> float:
+    """Containment score: shared meaningful words over the shorter text.
+
+    Gold descriptions are long paragraphs while candidate summaries are short,
+    so symmetric Jaccard under-scores true matches badly.
+    """
     gold_words = _words(gold.description)
     candidate_words = _words(candidate.summary_fr)
     if not gold_words or not candidate_words:
         return 0.0
-    jaccard = len(gold_words & candidate_words) / len(gold_words | candidate_words)
+    containment = len(gold_words & candidate_words) / min(len(gold_words), len(candidate_words))
     if gold.key_facts:
         summary = candidate.summary_fr.casefold()
         fact_hits = sum(1 for fact in gold.key_facts if fact.casefold() in summary)
-        fact_ratio = fact_hits / len(gold.key_facts)
-        return max(jaccard, fact_ratio)
-    return jaccard
+        return max(containment, fact_hits / len(gold.key_facts))
+    return containment
 
 
 def _classify(score: float) -> tuple[str, bool]:

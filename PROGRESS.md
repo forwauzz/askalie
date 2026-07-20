@@ -48,8 +48,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 ## Phase L — Live (needs user-provided env/data)
 - [x] PL.1 doctor command — done
 - [x] PL.2 Experiment 0: Case 1 ingest inventory — done (2026-07-20: 363 pages / 13 docs; 115 native, 228 OCR fra+eng, 20 empty/unreadable; 280.8s. Tokenize: 174 unique dates, 123 unique entities)
-- [ ] PL.3 Experiment 1: reader baseline on Case 1 — BLOCKED-ON-USER (API key)
-- [ ] PL.4 Experiment 2: Scout comparison — BLOCKED-ON-USER
+- [x] PL.3+PL.4 Experiments 1&2 combined (Scout units + reader baseline) — done 2026-07-20. Prior units were document-level (unusable), so baseline ran on Scout segmentation: 230 units + 12 uncertain ranges. 230/230 readers succeeded, 837 candidates, 595 with restored dates. **Machine-scored: 39/74 gold full-captured + 18 partial (awaiting human adjudication) + 11 wrong-date; only 6 gold entirely missed.** Prior system reference: 50/74 human-adjudicated, 187 rows. Live-path fixes en route: schema-in-prompt, max_turns, bracket-tolerant date restoration, containment-based matcher.
 - [ ] PL.5 Experiment 3: adaptive orchestrator — BLOCKED-ON-USER
 - [ ] PL.6 Experiment 4: curator metrics — BLOCKED-ON-USER
 - [ ] PL.7 Stability + Experiments 5–6 — BLOCKED-ON-USER (go/no-go review first)

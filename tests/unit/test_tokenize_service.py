@@ -61,15 +61,22 @@ def test_restoration_round_trip(fixture_pdf_dir: Path, tmp_path: Path) -> None:
     registry = load_date_registry(paths)
     token = registry.token_for("2025-07-16")
 
+    bare = token.strip("[]")  # model sometimes drops the brackets
     events = [
         CandidateEvent(event_id="e1", report_id="r1", event_date_token=token),
         CandidateEvent(event_id="e2", report_id="r1", event_date_token="[[DATE_ZZZZ]]"),
+        CandidateEvent(event_id="e3", report_id="r1", event_date_token=bare),
+        CandidateEvent(event_id="e4", report_id="r1", event_date_token="2024-03-01"),
+        CandidateEvent(event_id="e5", report_id="r1", event_date_token="3 mars 2024"),
+        CandidateEvent(event_id="e6", report_id="r1", event_date_token="19 septembre"),  # no year
     ]
     restored = restore_event_dates(events, registry)
-    assert restored[0].event_date == "2025-07-16"
-    assert restored[0].flags == []
-    assert restored[1].event_date is None
-    assert "date_unresolved" in restored[1].flags
+    assert restored[0].event_date == "2025-07-16" and restored[0].flags == []
+    assert restored[1].event_date is None and "date_unresolved" in restored[1].flags
+    assert restored[2].event_date == "2025-07-16"
+    assert restored[3].event_date == "2024-03-01" and "date_literal" in restored[3].flags
+    assert restored[4].event_date == "2024-03-03" and "date_literal" in restored[4].flags
+    assert restored[5].event_date is None and "date_unresolved" in restored[5].flags
 
 
 def test_tokenize_cli(fixture_pdf_dir: Path, tmp_path: Path, capsys) -> None:
