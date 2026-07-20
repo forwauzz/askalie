@@ -93,10 +93,12 @@ class ClaudeModelClient:
         from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query  # lazy
 
         request = self.build_structured_request(prompt, schema, system)
+        # allowed_tools=[] keeps this a single-shot call; max_turns leaves room
+        # for response continuation on long structured outputs.
         options = ClaudeAgentOptions(
             system_prompt=request["system_prompt"],
             model=model or self.model,
-            max_turns=1,
+            max_turns=8,
             allowed_tools=[],
         )
         full_prompt = (

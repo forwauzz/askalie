@@ -63,10 +63,12 @@ def test_export_all_files(paths: CasePaths) -> None:
 def test_case_list_and_run_screen(client: TestClient) -> None:
     home = client.get("/")
     assert home.status_code == 200 and "case_ui" in home.text
+    assert "Nouveau dossier" in home.text  # upload form on the landing page
 
     run_screen = client.get("/case/case_ui")
     assert run_screen.status_code == 200
     assert "Activité" in run_screen.text and "run_curator" in run_screen.text
+    assert "Générer la chronologie" in run_screen.text
 
 
 def test_progress_json(client: TestClient) -> None:
@@ -74,6 +76,11 @@ def test_progress_json(client: TestClient) -> None:
     assert state["case_id"] == "case_ui"
     assert state["reports_read"] == state["report_count"] > 0
     assert state["candidate_count"] > 0
+    assert state["ingest_done"] and state["tokenized"] and state["run_finished"]
+    assert state["pages_done"] == state["total_pages"] == 8
+    assert state["native_done"] > 0
+    assert len(state["documents"]) == 2
+    assert state["activity"]
 
 
 def test_chronology_and_reviewer_actions(client: TestClient, paths: CasePaths) -> None:
@@ -130,3 +137,68 @@ def test_export_via_ui(client: TestClient, paths: CasePaths) -> None:
 def test_record_decision_validates_action(paths: CasePaths) -> None:
     with pytest.raises(ValueError):
         record_decision(paths, "event_0001", "obliterate")
+
+
+def _wait_for(predicate, timeout: float = 90.0) -> None:
+    import time
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return
+        time.sleep(0.5)
+    raise AssertionError("timed out waiting for background job")
+
+
+def test_full_app_flow_upload_to_chronology(
+    fixture_pdf_dir: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Upload PDFs → ingestion job → build (mock) → review (PLAN P7.2 as full app)."""
+    workspace = tmp_path_factory.mktemp("app_flow_ws")
+    app_client = TestClient(create_app(workspace))
+
+    with (
+        (fixture_pdf_dir / "bundle_01.pdf").open("rb") as f1,
+        (fixture_pdf_dir / "bundle_02.pdf").open("rb") as f2,
+    ):
+        response = app_client.post(
+            "/cases",
+            data={"name": "Dossier Démo CNESST", "instructions": "Focus capacité de travail."},
+            files=[
+                ("files", ("bundle_01.pdf", f1, "application/pdf")),
+                ("files", ("bundle_02.pdf", f2, "application/pdf")),
+            ],
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    case_url = response.headers["location"]
+    case_id = case_url.rsplit("/", 1)[1]
+    assert case_id == "dossier-demo-cnesst"
+
+    def ingested() -> bool:
+        state = app_client.get(f"{case_url}/progress").json()
+        job = state.get("job") or {}
+        assert job.get("status") != "failed", job.get("error")
+        return bool(state.get("ingest_done") and state.get("tokenized"))
+
+    _wait_for(ingested)
+    case_paths = CasePaths.for_case(workspace, case_id)
+    assert case_paths.instructions.read_text(encoding="utf-8") == "Focus capacité de travail."
+
+    response = app_client.post(f"{case_url}/build", data={"runtime": "mock"}, follow_redirects=False)
+    assert response.status_code == 303
+
+    def finished() -> bool:
+        state = app_client.get(f"{case_url}/progress").json()
+        job = state.get("job") or {}
+        assert job.get("status") != "failed", job.get("error")
+        return bool(state.get("run_finished"))
+
+    _wait_for(finished)
+    state = app_client.get(f"{case_url}/progress").json()
+    assert state["candidate_count"] > 0 and state["reports_read"] > 0
+
+    review = app_client.get(f"{case_url}/chronology")
+    assert review.status_code == 200 and "File principale" in review.text
+    # build already exported the chronology files
+    assert (case_paths.output_dir / "chronology.csv").exists()

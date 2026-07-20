@@ -66,6 +66,11 @@ async def dispatch_readers(
             text = load_report_text(paths, report_id)
             try:
                 result, _attempts = await run_reader(client, unit, text, instructions)
+                # save immediately so progress views count completed reports live
+                paths.readers_dir.mkdir(parents=True, exist_ok=True)
+                (paths.readers_dir / f"{report_id}.result.json").write_text(
+                    result.model_dump_json(indent=2), encoding="utf-8"
+                )
                 return result
             except ReaderFailure as failure:
                 return failure
