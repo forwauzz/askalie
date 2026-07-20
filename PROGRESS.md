@@ -35,9 +35,9 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Phase 6 — Tools, agents, orchestrator
 - [x] P6.1 Tool layer (provider-neutral) — done (includes curator service from P6.4, needed by run_curator)
-- [ ] P6.2 SDK server + agent definitions — todo
-- [ ] P6.3 Scout pipeline (mock-first) — todo
-- [ ] P6.4 Gap + Curator services (mock-first) — todo
+- [x] P6.2 SDK adapters + agent specs — done
+- [x] P6.3 Scout pipeline (mock-first) — done
+- [x] P6.4 Gap + Curator services (mock-first) — done
 - [ ] P6.5 Orchestrator runner — todo
 
 ## Phase 7 — Curation output, export, review UI
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P6.2–P6.4 done. Neutral AgentSpecs (scout/gap-reviewer/curator) + prompt files (orchestrator/scout/gap per Spec §15.5/§16/§18); Claude adapter generating the MCP server and AgentDefinitions from the registries, allowed-tools list matching Spec §22.4, ClaudeRuntime live-session path (Phase L); Scout pipeline with 1500/500-char packets and uncertain-range → overlapping low-confidence fallback units; Gap service computing local facts (zero-event reports, uncited date tokens, reader flags) with task creation + executor (reread dispatches pass N+1 with origin tracked, pass limit 3 enforced, judgment tasks left pending). 82 tests green, ruff clean.
 
 - 2026-07-20 — P6.1 done. All 13 Spec §21 tools as plain async functions + ToolSpec registry (no SDK imports): case state, inspect/read/search, report map save/replace, update_report_units (split/merge/resize/relabel/mark_uncertain with reader-result invalidation + stale flagging, never deletion), task lifecycle, dispatch_readers wrapper, run_curator, finish_case writing chronology.json. Curator service with baseline mandatory-default post-check that forces default + flags disagreement, and defaults unassigned events. 75 tests green, ruff clean. Note: baseline config is a Python constant (curation/baseline.py) instead of YAML to avoid a pyyaml dep.
 
