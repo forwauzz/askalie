@@ -28,7 +28,11 @@ async def run_scout(ctx: ToolContext, client: ModelClient) -> dict[str, Any]:
             "Propose report units for this page packet (JSON):\n"
             + json.dumps(packet, ensure_ascii=False)
         )
-        result = await client.structured(prompt, ScoutResult, system=system)
+        from ask_alie import config
+
+        result = await client.structured(
+            prompt, ScoutResult, system=system, model=config.agent_model()
+        )
         for unit in result.proposed_units:
             unit_specs.append(
                 {

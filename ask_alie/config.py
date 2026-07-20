@@ -20,3 +20,13 @@ def tesseract_cmd() -> str | None:
 
 def anthropic_api_key() -> str | None:
     return os.environ.get("ANTHROPIC_API_KEY") or None
+
+
+def reader_model() -> str:
+    """High-volume reader calls: cheap tier by default (Spec §23.4)."""
+    return os.environ.get("ASK_ALIE_READER_MODEL", "haiku")
+
+
+def agent_model() -> str:
+    """Scout / Gap / Curator judgment calls: capable tier."""
+    return os.environ.get("ASK_ALIE_AGENT_MODEL", "sonnet")

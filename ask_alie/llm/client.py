@@ -83,13 +83,8 @@ class ClaudeModelClient:
         system: str | None = None,
         model: str | None = None,
     ) -> T:
-        from ask_alie import config
-
-        if not config.anthropic_api_key():
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set - copy .env.example to .env "
-                "(see NEEDS_FROM_USER.md)"
-            )
+        # Auth: uses ANTHROPIC_API_KEY when set, otherwise the user's Claude
+        # subscription login (Claude Code seat) — no per-token billing.
         from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query  # lazy
 
         request = self.build_structured_request(prompt, schema, system)

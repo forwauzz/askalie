@@ -77,13 +77,7 @@ class ClaudeRuntime:
         limits: dict[str, Any] | None = None,
         progress: ProgressFn = lambda _line: None,
     ) -> RunResult:
-        from ask_alie import config
-
-        if not config.anthropic_api_key():
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set - copy .env.example to .env "
-                "(see NEEDS_FROM_USER.md)"
-            )
+        # Auth: API key when set, otherwise the user's Claude subscription login.
         from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
         limits = {**DEFAULT_LIMITS, **(limits or {})}

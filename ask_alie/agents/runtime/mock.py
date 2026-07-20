@@ -12,7 +12,7 @@ from typing import Any
 from ask_alie.agents.gap import execute_tasks, run_gap_review
 from ask_alie.agents.runtime.base import DEFAULT_LIMITS, ProgressFn, RunResult
 from ask_alie.agents.scout import run_scout
-from ask_alie.reports.map import load_report_map
+from ask_alie.reports.map import readable_units
 from ask_alie.tools.registry import ToolContext, get_tool
 
 
@@ -36,9 +36,7 @@ class MockRuntime:
         progress("Scout: proposing report units")
         detail["scout"] = await run_scout(ctx, client)
 
-        report_ids = [
-            u.report_id for u in load_report_map(ctx.paths) if u.status != "superseded"
-        ]
+        report_ids = [u.report_id for u in readable_units(ctx.paths)]
         progress(f"Dispatching {len(report_ids)} readers")
         detail["dispatch"] = await get_tool("dispatch_readers").fn(
             ctx, report_ids=report_ids, max_concurrency=limits["max_concurrency"]

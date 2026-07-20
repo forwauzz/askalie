@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from ask_alie.events.store import CandidateStore
-from ask_alie.reports.map import load_report_map
+from ask_alie.reports.map import readable_units
 from ask_alie.tools.registry import ToolContext, tool
 from ask_alie.workspace.jsonl import JsonlStore
 from ask_alie.workspace.manifest import load_manifest
@@ -19,7 +19,7 @@ from ask_alie.workspace.tasks import AgentTask
 )
 async def get_case_state(ctx: ToolContext) -> dict[str, Any]:
     manifest = load_manifest(ctx.paths)
-    units = load_report_map(ctx.paths)
+    units = readable_units(ctx.paths)  # skips superseded, empty and duplicate-doc units
     page_records = list(ctx.paths.pages_dir.rglob("page_*.json"))
     reports_read = {p.stem.removesuffix(".result") for p in ctx.paths.readers_dir.glob("*.result.json")}
     tasks = JsonlStore(ctx.paths.tasks_file, AgentTask).read_all()
@@ -37,11 +37,9 @@ async def get_case_state(ctx: ToolContext) -> dict[str, Any]:
         "run_status": manifest.run_status,
         "document_count": len(manifest.documents),
         "page_count": len(page_records),
-        "report_count": len([u for u in units if u.status != "superseded"]),
-        "reports_read": len(reports_read),
-        "reports_unread": [
-            u.report_id for u in units if u.status != "superseded" and u.report_id not in reports_read
-        ],
+        "report_count": len(units),
+        "reports_read": len([u for u in units if u.report_id in reports_read]),
+        "reports_unread": [u.report_id for u in units if u.report_id not in reports_read],
         "candidate_count": len(candidates),
         "pending_tasks": sum(1 for t in tasks if t.status == "pending"),
         "reader_failures": failure_count,

@@ -28,11 +28,21 @@ def run_checks() -> list[tuple[str, bool, str]]:
     ok, detail = sdk_available()
     checks.append(("claude-agent-sdk importable", ok, detail))
 
+    if config.anthropic_api_key():
+        checks.append(("Model auth", True, "API key (pay-per-token billing)"))
+    else:
+        checks.append(
+            (
+                "Model auth",
+                True,
+                "Claude subscription login (uses your seat; subject to plan usage limits)",
+            )
+        )
     checks.append(
         (
-            "ANTHROPIC_API_KEY",
-            bool(config.anthropic_api_key()),
-            "set" if config.anthropic_api_key() else "missing - copy .env.example to .env",
+            "Model tiers",
+            True,
+            f"readers={config.reader_model()}, agents={config.agent_model()}",
         )
     )
 

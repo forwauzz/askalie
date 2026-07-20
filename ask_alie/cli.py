@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         from pathlib import Path
 
         from ask_alie.readers.dispatcher import dispatch_readers
-        from ask_alie.reports.map import load_report_map
+        from ask_alie.reports.map import readable_units
         from ask_alie.workspace.paths import CasePaths
 
         paths = CasePaths(root=Path(args.case))
@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         report_ids = (
             args.reports.split(",")
             if args.reports
-            else [u.report_id for u in load_report_map(paths)]
+            else [u.report_id for u in readable_units(paths)]
         )
         summary = asyncio.run(
             dispatch_readers(paths, client, report_ids, max_concurrency=args.concurrency)

@@ -23,3 +23,22 @@ def load_report_map(paths: CasePaths) -> list[ReportUnit]:
         ReportUnit.model_validate(raw)
         for raw in json.loads(paths.report_map.read_text(encoding="utf-8"))
     ]
+
+
+def readable_units(paths: CasePaths) -> list[ReportUnit]:
+    """Units worth dispatching readers to: skips superseded units, empty pages
+    and units inside byte-identical duplicate documents (cost control)."""
+    from ask_alie.workspace.manifest import load_manifest
+
+    duplicate_docs: set[str] = set()
+    if paths.manifest.exists():
+        duplicate_docs = {
+            d.document_id for d in load_manifest(paths).documents if d.duplicate_of
+        }
+    return [
+        unit
+        for unit in load_report_map(paths)
+        if unit.status != "superseded"
+        and unit.document_type != "empty"
+        and unit.document_id not in duplicate_docs
+    ]

@@ -55,7 +55,11 @@ async def run_reader(
         simplified = attempt == 3
         prompt = build_reader_prompt(unit, report_text, instructions, simplified=simplified)
         try:
-            result = await client.structured(prompt, ReaderResult, system=system)
+            from ask_alie import config
+
+            result = await client.structured(
+                prompt, ReaderResult, system=system, model=config.reader_model()
+            )
             result.report_id = unit.report_id  # authoritative, never model-chosen
             return result, attempt
         except Exception as exc:  # noqa: BLE001 - every failure enters the retry ladder

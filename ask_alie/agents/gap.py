@@ -83,7 +83,11 @@ async def run_gap_review(ctx: ToolContext, client: ModelClient) -> dict[str, Any
         "Review this case state and propose targeted follow-up tasks (JSON facts):\n"
         + json.dumps(facts, ensure_ascii=False, indent=1)
     )
-    result = await client.structured(prompt, GapResult, system=load_prompt("gap.md"))
+    from ask_alie import config
+
+    result = await client.structured(
+        prompt, GapResult, system=load_prompt("gap.md"), model=config.agent_model()
+    )
     created: dict[str, Any] = {"created": []}
     if result.tasks:
         created = await create_tasks(

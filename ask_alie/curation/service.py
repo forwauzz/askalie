@@ -64,7 +64,11 @@ async def run_curator(
         "Assign each candidate event to the 'default' or 'secondary' queue.\n"
         "Candidates (JSON):\n" + json.dumps(summaries, ensure_ascii=False, indent=1)
     )
-    result = await client.structured(prompt, CuratorResult, system=curator_system_prompt())
+    from ask_alie import config
+
+    result = await client.structured(
+        prompt, CuratorResult, system=curator_system_prompt(), model=config.agent_model()
+    )
 
     drafts = {d.event_id: d for d in result.assignments}
     by_id = {e.event_id: e for e in events}
