@@ -121,7 +121,9 @@ def test_skill_application_is_recorded(case_paths: CasePaths) -> None:
     asyncio.run(dispatch_readers(case_paths, HeuristicReaderMock(), ["report_0003"]))
 
     log_text = case_paths.run_log.read_text(encoding="utf-8")
-    read_lines = [json.loads(l) for l in log_text.splitlines() if '"report_read"' in l]
+    read_lines = [
+        json.loads(line) for line in log_text.splitlines() if '"report_read"' in line
+    ]
     assert read_lines and read_lines[-1]["result"]["skills"] == ["read-cnesst-decision"]
     assert "skill: read-cnesst-decision" in read_lines[-1]["reason"]
 
