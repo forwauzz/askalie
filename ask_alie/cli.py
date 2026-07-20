@@ -15,7 +15,9 @@ COMMANDS: dict[str, str] = {
     "doctor": "Check environment prerequisites for live runs",
 }
 
-IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize", "reports", "readers", "evaluate"})
+IMPLEMENTED: frozenset[str] = frozenset(
+    {"ingest", "tokenize", "reports", "readers", "evaluate", "run", "doctor"}
+)
 
 # Packet that will replace each stub, per PLAN.md.
 _PENDING_PACKET = {
@@ -54,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
         elif name == "evaluate":
             sub.add_argument("--case", required=True)
             sub.add_argument("--gold", required=True, help="Gold events JSONL path")
+        elif name == "run":
+            sub.add_argument("--case", required=True)
+            sub.add_argument("--mock", action="store_true", help="Scripted offline orchestration")
+            sub.add_argument("--runtime", choices=["claude", "mock", "openai"], default="claude")
+            sub.add_argument("--max-turns", type=int, default=None)
     return parser
 
 
@@ -133,6 +140,36 @@ def main(argv: list[str] | None = None) -> int:
 
         report = evaluate_case(CasePaths(root=Path(args.case)), Path(args.gold))
         print(render_run_summary(report))
+        return 0
+    if args.command == "run":
+        import asyncio
+        from pathlib import Path
+
+        from ask_alie.tools.registry import ToolContext
+        from ask_alie.workspace.paths import CasePaths
+
+        runtime_name = "mock" if args.mock else args.runtime
+        if runtime_name == "openai":
+            print("The OpenAI runtime is a stub - see PLAN.md §3 (provider portability).")
+            return 1
+        paths = CasePaths(root=Path(args.case))
+        if runtime_name == "mock":
+            from ask_alie.agents.runtime.mock import MockRuntime
+
+            runtime, ctx = MockRuntime(), ToolContext(paths=paths)
+        else:
+            from ask_alie.agents.runtime.claude import ClaudeRuntime
+            from ask_alie.llm.client import ClaudeModelClient
+
+            runtime, ctx = ClaudeRuntime(), ToolContext(paths=paths, client=ClaudeModelClient())
+        limits = {"max_turns": args.max_turns} if args.max_turns else {}
+        result = asyncio.run(runtime.run_orchestration(ctx, limits, progress=print))
+        print(f"run {result.status} ({result.runtime} runtime)")
+        return 0 if result.status == "finished" else 1
+    if args.command == "doctor":
+        from ask_alie.doctor import render_checks, run_checks
+
+        print(render_checks(run_checks()))
         return 0
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1

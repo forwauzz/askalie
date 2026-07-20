@@ -38,7 +38,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P6.2 SDK adapters + agent specs — done
 - [x] P6.3 Scout pipeline (mock-first) — done
 - [x] P6.4 Gap + Curator services (mock-first) — done
-- [ ] P6.5 Orchestrator runner — todo
+- [x] P6.5 Orchestrator runner — done (mock runtime + run CLI; Claude live path BLOCKED-ON-USER for execution)
 
 ## Phase 7 — Curation output, export, review UI
 - [ ] P7.1 Exports — todo
@@ -46,7 +46,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [ ] P7.3 Progress view — todo
 
 ## Phase L — Live (needs user-provided env/data)
-- [ ] PL.1 doctor command — todo
+- [x] PL.1 doctor command — done
 - [ ] PL.2 Experiment 0: Case 1 ingest inventory — BLOCKED-ON-USER (Case 1 bundle, Tesseract)
 - [ ] PL.3 Experiment 1: reader baseline on Case 1 — BLOCKED-ON-USER (API key)
 - [ ] PL.4 Experiment 2: Scout comparison — BLOCKED-ON-USER
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P6.5 + PL.1 done. ScriptedCaseMock covering all four agent schemas deterministically; MockRuntime running the full phase sequence (scout → readers → gap ×N → curator → finish) through the real tool layer; `run` CLI with runtime selection (mock / claude / openai-stub); `doctor` CLI reporting live prerequisites. Integration test proves the whole case runs offline: scout units, zero reader failures, pass-2 recovery via the gap loop, full curation, chronology.json, finished manifest. 86 tests green, ruff clean.
 
 - 2026-07-20 — P6.2–P6.4 done. Neutral AgentSpecs (scout/gap-reviewer/curator) + prompt files (orchestrator/scout/gap per Spec §15.5/§16/§18); Claude adapter generating the MCP server and AgentDefinitions from the registries, allowed-tools list matching Spec §22.4, ClaudeRuntime live-session path (Phase L); Scout pipeline with 1500/500-char packets and uncertain-range → overlapping low-confidence fallback units; Gap service computing local facts (zero-event reports, uncited date tokens, reader flags) with task creation + executor (reread dispatches pass N+1 with origin tracked, pass limit 3 enforced, judgment tasks left pending). 82 tests green, ruff clean.
 

@@ -109,6 +109,16 @@ class ClaudeModelClient:
         return schema.model_validate(payload)
 
 
+def sdk_available() -> tuple[bool, str]:
+    """Report whether claude-agent-sdk imports (used by doctor)."""
+    try:
+        import claude_agent_sdk  # noqa: F401
+
+        return True, "ok"
+    except ImportError as exc:
+        return False, str(exc)
+
+
 def _extract_json(text: str) -> Any:
     """Parse a JSON object from model output, tolerating code fences."""
     stripped = text.strip()
