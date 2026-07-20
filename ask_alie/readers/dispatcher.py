@@ -11,7 +11,7 @@ from ask_alie.events.restore import restore_event_dates
 from ask_alie.events.store import CandidateStore
 from ask_alie.llm.client import ModelClient
 from ask_alie.privacy.tokenize import load_date_registry
-from ask_alie.readers.runner import ReaderFailure, run_reader
+from ask_alie.readers.runner import ReaderFailure, applied_skills, run_reader
 from ask_alie.readers.schema import ReaderResult
 from ask_alie.reports.map import load_report_map
 from ask_alie.reports.service import load_report_text
@@ -71,6 +71,18 @@ async def dispatch_readers(
                 (paths.readers_dir / f"{report_id}.result.json").write_text(
                     result.model_dump_json(indent=2), encoding="utf-8"
                 )
+                skills = applied_skills(unit.document_type)
+                log_action(
+                    paths,
+                    actor="reader",
+                    action="report_read",
+                    targets=[report_id],
+                    reason=(
+                        f"{len(result.events)} event(s) from {unit.document_type or 'report'}"
+                        + (f" · skill: {', '.join(skills)}" if skills else "")
+                    ),
+                    result={"events": len(result.events), "skills": skills},
+                )
                 return result
             except ReaderFailure as failure:
                 return failure
@@ -104,6 +116,7 @@ async def dispatch_readers(
                         reader_run_id=f"reader_{report_id}_p{pass_number}",
                         pass_number=pass_number,
                         reason_for_pass=reason,
+                        skills=applied_skills(units[report_id].document_type),
                     ),
                     **draft.model_dump(),
                 )

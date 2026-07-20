@@ -14,6 +14,7 @@ class EventOrigin(AlieModel):
     reader_run_id: str
     pass_number: int = 1
     reason_for_pass: str = "initial"
+    skills: list[str] = []  # skills active during the reader pass that produced this event
 
 
 class CandidateEvent(AlieModel):

@@ -121,6 +121,7 @@ def build_rows(paths: CasePaths) -> list[dict[str, Any]]:
                 "duplicate_of": assignment.duplicate_of if assignment else None,
                 "flags": event.flags,
                 "pass_number": event.origin.pass_number if event.origin else 1,
+                "skills": event.origin.skills if event.origin else [],
                 "review_reasons": review_reasons,
             }
         )

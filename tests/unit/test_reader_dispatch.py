@@ -116,6 +116,19 @@ def test_dispatch_respects_concurrency(case_paths: CasePaths) -> None:
     assert peak <= 2
 
 
+def test_skill_application_is_recorded(case_paths: CasePaths) -> None:
+    """report_0003 is administrative_decision → the CNESST skill applies and is logged."""
+    asyncio.run(dispatch_readers(case_paths, HeuristicReaderMock(), ["report_0003"]))
+
+    log_text = case_paths.run_log.read_text(encoding="utf-8")
+    read_lines = [json.loads(l) for l in log_text.splitlines() if '"report_read"' in l]
+    assert read_lines and read_lines[-1]["result"]["skills"] == ["read-cnesst-decision"]
+    assert "skill: read-cnesst-decision" in read_lines[-1]["reason"]
+
+    events = [e for e in CandidateStore(case_paths).read_all() if e.report_id == "report_0003"]
+    assert events and all(e.origin.skills == ["read-cnesst-decision"] for e in events)
+
+
 def test_duplicate_linking_retains_both() -> None:
     a = CandidateEvent(
         event_id="e1", report_id="r1", event_date_token="[[DATE_AAAA]]",

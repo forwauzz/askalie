@@ -664,11 +664,17 @@ tick(); setInterval(tick, 1500);
                 current_year = year
                 body_rows.append(f"<tr class='group'><td colspan='6'>{_esc(year)}</td></tr>")
             nice, iso = _fmt_date(row["date"])
+            provenance = f"pass {row['pass_number']}"
+            if row.get("skills"):
+                provenance += f" · skill: {', '.join(row['skills'])}"
+            if row["flags"]:
+                provenance += f" · flags: {', '.join(row['flags'])}"
             quote = (
                 f"<details><summary>Source excerpt · p. {_esc(row['quote_page'])}</summary>"
-                f"<blockquote>{_esc(row['quote'])}</blockquote></details>"
+                f"<blockquote>{_esc(row['quote'])}</blockquote>"
+                f"<p style='color:var(--muted);font-size:.78rem'>{_esc(provenance)}</p></details>"
                 if row["quote"]
-                else ""
+                else f"<p style='color:var(--muted);font-size:.78rem'>{_esc(provenance)}</p>"
             )
             pages = ", ".join(str(p) for p in row["source_pages"])
             filters = " ".join(
@@ -679,10 +685,15 @@ tick(); setInterval(tick, 1500);
                 f"{row['source_document']}".lower()
             )
             amber = " rowamber" if row["needs_review"] and row["status"] != "rejected" else ""
+            skill_chip = (
+                " <span class='chip ok' title='extracted with a specialized skill'>skill</span>"
+                if row.get("skills")
+                else ""
+            )
             body_rows.append(
                 f"<tr class='evrow{amber}' data-f='{filters}' data-s=\"{search_text}\">"
                 f"<td class='date'>{_esc(nice)}<span>{_esc(iso)}</span></td>"
-                f"<td class='ev'><span class='chip type'>{_esc(row['event_type'])}</span>"
+                f"<td class='ev'><span class='chip type'>{_esc(row['event_type'])}</span>{skill_chip}"
                 f"<p>{_esc(row['summary'])}</p>{quote}</td>"
                 f"<td>{_esc(row['author'] or '—')}</td>"
                 f"<td class='src'><b title=\"{_esc(row['source_document'])}\">{_esc(row['source_document'])}</b>"

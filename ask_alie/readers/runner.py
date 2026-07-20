@@ -18,6 +18,16 @@ class ReaderFailure(RuntimeError):
         self.attempts = attempts
 
 
+def applied_skills(document_type: str | None) -> list[str]:
+    """Names of skills that will be applied for this document type."""
+    from ask_alie import config
+    from ask_alie.agents.skills import skills_for
+
+    if not config.skills_enabled():
+        return []
+    return [skill.name for skill in skills_for(document_type)]
+
+
 def reader_system_prompt(document_type: str | None = None) -> str:
     base = (_PROMPTS_DIR / "reader.md").read_text(encoding="utf-8")
     from ask_alie import config
