@@ -23,11 +23,11 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P3.3 Safe text + restoration — done
 
 ## Phase 4 — Reader baseline (mock-first)
-- [ ] P4.1 Report map import — todo
-- [ ] P4.2 Model client seam — todo
-- [ ] P4.3 Reader worker + dispatcher — todo
-- [ ] P4.4 Candidate store + duplicates — todo
-- [ ] P4.5 readers CLI — todo
+- [x] P4.1 Report map import — done
+- [x] P4.2 Model client seam — done
+- [x] P4.3 Reader worker + dispatcher — done
+- [x] P4.4 Candidate store + duplicates — done
+- [x] P4.5 readers CLI — done
 
 ## Phase 5 — Evaluation harness
 - [ ] P5.1 Gold format + matching — todo
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P4.1–P4.5 done. Report map + manual unit import with page-marker text assembly; ModelClient seam (Mock / Claude, lazy SDK import, import-boundary test enforcing PLAN §2); reader runner with Spec §34 retry ladder (retry → simplified prompt → fail surfaced); bounded async dispatcher writing results, assigning event IDs/origins, restoring dates, recording failures; candidate store; duplicate linking (never deleting); HeuristicReaderMock enabling offline end-to-end; `reports` + `readers` CLI. Mock e2e on fixtures: 3 reports → candidates with restored dates. 64 tests green, ruff clean.
 
 - 2026-07-20 — P3.1–P3.3 done. Date detection (fr/en textual, ISO, dmy with ambiguity confidence; 25 positive + 6 negative table cases incl. OCR-mangled never-mis-normalize), deterministic opaque date tokens + sequential entity tokens with save/load registries, regex recognizers (RAMQ/phone/email/postal/labeled claim) + per-case known-entities dictionary, safe-text builder with overlap resolution, tokenize CLI, date restoration with date_unresolved flag. Leak test proves no raw identifiers/dates survive in safe text. 56 tests green, ruff clean.
 

@@ -7,6 +7,7 @@ import argparse
 COMMANDS: dict[str, str] = {
     "ingest": "Ingest case PDFs into a local case workspace",
     "tokenize": "Replace identifiers and dates with stable tokens",
+    "reports": "Import manual report units from a JSON spec file",
     "readers": "Run the reader pass over report units",
     "run": "Run the adaptive orchestrator on a case",
     "evaluate": "Score a case against a gold chronology",
@@ -14,7 +15,7 @@ COMMANDS: dict[str, str] = {
     "doctor": "Check environment prerequisites for live runs",
 }
 
-IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize"})
+IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize", "reports", "readers"})
 
 # Packet that will replace each stub, per PLAN.md.
 _PENDING_PACKET = {
@@ -42,6 +43,14 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--workspace", default=None, help="Workspace root (default: env/workspace)")
         elif name == "tokenize":
             sub.add_argument("--case", required=True, help="Case directory (workspace/cases/<id>)")
+        elif name == "reports":
+            sub.add_argument("--case", required=True)
+            sub.add_argument("--import-file", required=True, help="JSON list of unit specs")
+        elif name == "readers":
+            sub.add_argument("--case", required=True)
+            sub.add_argument("--concurrency", type=int, default=5)
+            sub.add_argument("--mock", action="store_true", help="Use the offline heuristic mock")
+            sub.add_argument("--reports", default=None, help="Comma-separated report ids (default: all)")
     return parser
 
 
@@ -73,5 +82,44 @@ def main(argv: list[str] | None = None) -> int:
 
         print(tokenize_case(Path(args.case)).render())
         return 0
+    if args.command == "reports":
+        import json
+        from pathlib import Path
+
+        from ask_alie.reports.service import create_units_from_specs
+        from ask_alie.workspace.paths import CasePaths
+
+        paths = CasePaths(root=Path(args.case))
+        specs = json.loads(Path(args.import_file).read_text(encoding="utf-8"))
+        units = create_units_from_specs(paths, specs)
+        print(f"report map now has {len(units)} unit(s)")
+        return 0
+    if args.command == "readers":
+        import asyncio
+        from pathlib import Path
+
+        from ask_alie.readers.dispatcher import dispatch_readers
+        from ask_alie.reports.map import load_report_map
+        from ask_alie.workspace.paths import CasePaths
+
+        paths = CasePaths(root=Path(args.case))
+        if args.mock:
+            from ask_alie.llm.mock import HeuristicReaderMock
+
+            client = HeuristicReaderMock()
+        else:
+            from ask_alie.llm.client import ClaudeModelClient
+
+            client = ClaudeModelClient()
+        report_ids = (
+            args.reports.split(",")
+            if args.reports
+            else [u.report_id for u in load_report_map(paths)]
+        )
+        summary = asyncio.run(
+            dispatch_readers(paths, client, report_ids, max_concurrency=args.concurrency)
+        )
+        print(summary.render())
+        return 0 if summary.failed == 0 else 1
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1
