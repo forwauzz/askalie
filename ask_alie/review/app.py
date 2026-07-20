@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from ask_alie.ingest.service import ingest_case, load_page_records
 from ask_alie.privacy.tokenize import tokenize_case
@@ -469,12 +469,17 @@ def create_app(workspace_root: Path) -> FastAPI:
         )
 
         activity = []
+        last_activity_age = None
         if paths.run_log.exists():
+            import time as _time
+
+            last_activity_age = round(_time.time() - paths.run_log.stat().st_mtime)
             for line in paths.run_log.read_text(encoding="utf-8").splitlines()[-15:]:
                 entry = json.loads(line)
                 text = entry.get("reason") or json.dumps(entry.get("result") or {}, ensure_ascii=False)
                 activity.append(f"{entry['actor']} · {entry['action']} — {text[:160]}")
         state["activity"] = list(reversed(activity))
+        state["last_activity_seconds"] = last_activity_age
         return state
 
     # ---------- overview tab ----------
@@ -567,7 +572,10 @@ async function tick() {{
   }}).join('') || '<li>Waiting…</li>';
 
   const ingRun = s.job && s.job.status === 'running' && s.job.stage === 'ingestion';
-  const chrRun = s.job && s.job.status === 'running' && s.job.stage === 'chronology';
+  // agents may also run outside this server (CLI/scripts): recent activity counts
+  const external = !s.job && !s.run_finished && s.last_activity_seconds !== null
+      && s.last_activity_seconds < 180 && (s.reports_read || 0) > 0;
+  const chrRun = (s.job && s.job.status === 'running' && s.job.stage === 'chronology') || external;
   const ready = s.ingest_done && s.tokenized;
   el('f-process').className = 's ' + (ready ? 'done' : (ingRun ? 'active' : ''));
   el('f-generate').className = 's ' + (s.run_finished ? 'done' : ((chrRun || ready) ? 'active' : ''));
@@ -725,8 +733,10 @@ tick(); setInterval(tick, 1500);
     <button class='fchip' data-q='review'>Needs review ({len(queues["unresolved"])})</button>
     <input type='text' id='search' placeholder='Search events, sources, authors…'>
     <span style='flex:1'></span>
-    <form method='post' action='/case/{_esc(case_id)}/export' class='inline'>
-      <button class='btn ghost small' type='submit'>Export CSV / HTML / JSON</button></form>
+    <span style='font-size:.85rem;color:var(--muted)'>Download:</span>
+    <a class='btn ghost small' href='/case/{_esc(case_id)}/download/csv'>CSV</a>
+    <a class='btn ghost small' href='/case/{_esc(case_id)}/download/html'>HTML</a>
+    <a class='btn ghost small' href='/case/{_esc(case_id)}/download/json'>JSON</a>
   </div>
   {table}
 </div>
@@ -764,5 +774,23 @@ document.getElementById('search')?.addEventListener('input', apply);
     async def export(case_id: str) -> RedirectResponse:
         export_all(paths_for(case_id))
         return RedirectResponse(url=f"/case/{case_id}/chronology", status_code=303)
+
+    _DOWNLOAD_TYPES = {
+        "csv": ("chronology.csv", "text/csv"),
+        "html": ("chronology.html", "text/html"),
+        "json": ("chronology.json", "application/json"),
+    }
+
+    @app.get("/case/{case_id}/download/{kind}")
+    async def download(case_id: str, kind: str):
+        if kind not in _DOWNLOAD_TYPES:
+            return JSONResponse({"error": f"unknown format: {kind}"}, status_code=404)
+        filename, media_type = _DOWNLOAD_TYPES[kind]
+        path = paths_for(case_id).output_dir / filename
+        if not path.exists():
+            export_all(paths_for(case_id))  # generate on first download
+        return FileResponse(
+            path, media_type=media_type, filename=f"{case_id}-{filename}"
+        )
 
     return app

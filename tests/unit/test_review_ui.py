@@ -152,6 +152,21 @@ def test_export_via_ui(client: TestClient, paths: CasePaths) -> None:
     assert (paths.output_dir / "chronology.csv").exists()
 
 
+def test_download_links(client: TestClient) -> None:
+    csv_response = client.get("/case/case_ui/download/csv")
+    assert csv_response.status_code == 200
+    assert "chronology.csv" in csv_response.headers["content-disposition"]
+    assert csv_response.text.splitlines()[0].lstrip("﻿").startswith("Date,")
+
+    html_response = client.get("/case/case_ui/download/html")
+    assert html_response.status_code == 200 and "File principale" in html_response.text
+
+    assert client.get("/case/case_ui/download/docx").status_code == 404
+    # links are present in the chronology toolbar
+    page = client.get("/case/case_ui/chronology")
+    assert "/case/case_ui/download/csv" in page.text
+
+
 def test_record_decision_validates_action(paths: CasePaths) -> None:
     with pytest.raises(ValueError):
         record_decision(paths, "event_0001", "obliterate")
