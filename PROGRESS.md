@@ -41,9 +41,9 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P6.5 Orchestrator runner — done (mock runtime + run CLI; Claude live path BLOCKED-ON-USER for execution)
 
 ## Phase 7 — Curation output, export, review UI
-- [ ] P7.1 Exports — todo
-- [ ] P7.2 Review UI — todo
-- [ ] P7.3 Progress view — todo
+- [x] P7.1 Exports — done
+- [x] P7.2 Review UI — done
+- [x] P7.3 Progress view — done
 
 ## Phase L — Live (needs user-provided env/data)
 - [x] PL.1 doctor command — done
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P7.1–P7.3 done; AUTONOMOUS PORTION COMPLETE. Reviewer decision service (append-only replay: accept/edit/move/reject/merge/duplicate), default/secondary/unresolved queue splitting, JSON + Excel-friendly CSV + self-contained HTML exports with quotes and page refs, FastAPI review UI (case list, run screen with activity feed, chronology with per-row action forms, progress JSON endpoint), serve CLI. HANDOFF.md written. 92 tests green, ruff clean. Remaining packets are all BLOCKED-ON-USER (Phase L live experiments).
 
 - 2026-07-20 — P6.5 + PL.1 done. ScriptedCaseMock covering all four agent schemas deterministically; MockRuntime running the full phase sequence (scout → readers → gap ×N → curator → finish) through the real tool layer; `run` CLI with runtime selection (mock / claude / openai-stub); `doctor` CLI reporting live prerequisites. Integration test proves the whole case runs offline: scout units, zero reader failures, pass-2 recovery via the gap loop, full curation, chronology.json, finished manifest. 86 tests green, ruff clean.
 

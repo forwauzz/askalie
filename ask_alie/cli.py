@@ -16,7 +16,7 @@ COMMANDS: dict[str, str] = {
 }
 
 IMPLEMENTED: frozenset[str] = frozenset(
-    {"ingest", "tokenize", "reports", "readers", "evaluate", "run", "doctor"}
+    {"ingest", "tokenize", "reports", "readers", "evaluate", "run", "doctor", "serve"}
 )
 
 # Packet that will replace each stub, per PLAN.md.
@@ -61,6 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--mock", action="store_true", help="Scripted offline orchestration")
             sub.add_argument("--runtime", choices=["claude", "mock", "openai"], default="claude")
             sub.add_argument("--max-turns", type=int, default=None)
+        elif name == "serve":
+            sub.add_argument("--workspace", default=None)
+            sub.add_argument("--host", default="127.0.0.1")
+            sub.add_argument("--port", type=int, default=8321)
     return parser
 
 
@@ -170,6 +174,18 @@ def main(argv: list[str] | None = None) -> int:
         from ask_alie.doctor import render_checks, run_checks
 
         print(render_checks(run_checks()))
+        return 0
+    if args.command == "serve":
+        from pathlib import Path
+
+        import uvicorn
+
+        from ask_alie import config
+        from ask_alie.review.app import create_app
+
+        workspace = Path(args.workspace) if args.workspace else config.workspace_root()
+        print(f"Serving review UI for {workspace} at http://{args.host}:{args.port}")
+        uvicorn.run(create_app(workspace), host=args.host, port=args.port)
         return 0
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1

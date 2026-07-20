@@ -12,10 +12,8 @@ def test_help_lists_all_commands() -> None:
         assert name in help_text
 
 
-def test_stub_commands_exit_nonzero() -> None:
+def test_all_commands_implemented() -> None:
     from ask_alie.cli import IMPLEMENTED, main
 
-    stub_commands = set(COMMANDS) - set(IMPLEMENTED)
-    assert stub_commands, "all commands implemented: retire this test"
-    assert main([next(iter(sorted(stub_commands)))]) == 1
-    assert main([]) == 0
+    assert set(COMMANDS) == set(IMPLEMENTED)
+    assert main([]) == 0  # bare invocation prints help
