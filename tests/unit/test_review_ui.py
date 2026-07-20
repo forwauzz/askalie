@@ -161,10 +161,30 @@ def test_download_links(client: TestClient) -> None:
     html_response = client.get("/case/case_ui/download/html")
     assert html_response.status_code == 200 and "File principale" in html_response.text
 
-    assert client.get("/case/case_ui/download/docx").status_code == 404
+    assert client.get("/case/case_ui/download/pdf").status_code == 404
     # links are present in the chronology toolbar
     page = client.get("/case/case_ui/chronology")
     assert "/case/case_ui/download/csv" in page.text
+    assert "/case/case_ui/download/docx" in page.text
+
+
+def test_word_chronology_download(client: TestClient, paths: CasePaths, tmp_path: Path) -> None:
+    response = client.get("/case/case_ui/download/docx")
+    assert response.status_code == 200
+    assert "chronology.docx" in response.headers["content-disposition"]
+
+    saved = tmp_path / "chrono.docx"
+    saved.write_bytes(response.content)
+    from docx import Document
+
+    doc = Document(saved)
+    full_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Chronologie médico-légale" in full_text
+    assert len(doc.tables) == 3  # main, secondary, unresolved
+    header_cells = [c.text for c in doc.tables[0].rows[0].cells]
+    assert header_cells == ["Date", "Événement", "Source"]
+    # at least one data row with a French-formatted date and a source document
+    assert len(doc.tables[0].rows) > 1 or len(doc.tables[2].rows) > 1
 
 
 def test_record_decision_validates_action(paths: CasePaths) -> None:

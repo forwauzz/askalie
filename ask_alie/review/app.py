@@ -734,6 +734,7 @@ tick(); setInterval(tick, 1500);
     <input type='text' id='search' placeholder='Search events, sources, authors…'>
     <span style='flex:1'></span>
     <span style='font-size:.85rem;color:var(--muted)'>Download:</span>
+    <a class='btn small' href='/case/{_esc(case_id)}/download/docx'>Word</a>
     <a class='btn ghost small' href='/case/{_esc(case_id)}/download/csv'>CSV</a>
     <a class='btn ghost small' href='/case/{_esc(case_id)}/download/html'>HTML</a>
     <a class='btn ghost small' href='/case/{_esc(case_id)}/download/json'>JSON</a>
@@ -776,6 +777,10 @@ document.getElementById('search')?.addEventListener('input', apply);
         return RedirectResponse(url=f"/case/{case_id}/chronology", status_code=303)
 
     _DOWNLOAD_TYPES = {
+        "docx": (
+            "chronology.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
         "csv": ("chronology.csv", "text/csv"),
         "html": ("chronology.html", "text/html"),
         "json": ("chronology.json", "application/json"),
