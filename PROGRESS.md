@@ -13,9 +13,9 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P1.3 Run log — done
 
 ## Phase 2 — Ingest
-- [ ] P2.1 Native extraction + quality — todo
-- [ ] P2.2 OCR fallback — todo
-- [ ] P2.3 ingest CLI — todo
+- [x] P2.1 Native extraction + quality — done
+- [x] P2.2 OCR fallback — done (Tesseract absent on this machine; NullOcrEngine path verified, live test auto-skips — see NEEDS_FROM_USER.md)
+- [x] P2.3 ingest CLI — done
 
 ## Phase 3 — Tokenization & privacy
 - [ ] P3.1 Date detection — todo
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P2.1–P2.3 done. Multi-signal quality scorer (Spec §12.3), PyMuPDF native extraction, page PNG rendering, OcrEngine seam (Tesseract subprocess / Null fallback), full ingest pipeline writing page records + raw text, `ingest` CLI with Step-1 summary. Fixture case: 8 pages → 5 native, 3 OCR-needed correctly flagged. 16 tests green + 1 skip (live Tesseract), ruff clean. Created NEEDS_FROM_USER.md (Tesseract, API key, Case 1 paths).
 
 - 2026-07-20 — P1.1–P1.3 done. All Spec §11 Pydantic models (manifest, page, report unit, candidate event, task, curation, decision) with unknown-field tolerance; CasePaths tree per Spec §10; sha256-idempotent create_case_workspace; JsonlStore; log_action run log. 10 tests green, ruff clean.
 

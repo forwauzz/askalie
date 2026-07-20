@@ -33,8 +33,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
     for name, help_text in COMMANDS.items():
-        subparsers.add_parser(name, help=help_text)
+        sub = subparsers.add_parser(name, help=help_text)
+        if name == "ingest":
+            sub.add_argument("--input", required=True, help="Directory containing case PDFs")
+            sub.add_argument("--case-id", required=True)
+            sub.add_argument("--workspace", default=None, help="Workspace root (default: env/workspace)")
     return parser
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from ask_alie import config
+    from ask_alie.ingest.service import ingest_case
+
+    workspace = Path(args.workspace) if args.workspace else config.workspace_root()
+    manifest, summary = ingest_case(Path(args.input), args.case_id, workspace)
+    print(f"case {manifest.case_id}: {len(manifest.documents)} document(s)")
+    print(summary.render())
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,5 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == "ingest":
+        return _cmd_ingest(args)
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1
