@@ -1,0 +1,164 @@
+# Ask ALIE — Autonomous Build Plan
+
+**Source of truth for requirements:** `ASK_ALIE_AGENTIC_POC_FULL_SPEC.md` (the Spec).
+**This document:** how the build loop executes the Spec end to end without the user.
+**Progress ledger:** `PROGRESS.md` — the loop updates it every iteration. Never mark a packet done without its exit criteria passing.
+
+---
+
+## 1. Operating rules for the loop
+
+1. Each iteration: read `PROGRESS.md`, pick the **first packet that is not done and not blocked**, implement it completely, run `pytest`, update `PROGRESS.md`, commit.
+2. A packet is **done** only when every exit criterion passes as an automated test or verifiable command. Partial work stays in progress with a note.
+3. **Never require the network, an API key, real case PDFs, or Tesseract to make the test suite pass.** Anything that needs them goes behind a seam (see §3) and is exercised by mock/fixture tests. Live-only steps live in Phase L and are marked `BLOCKED-ON-USER`.
+4. When something needs the user (env var, install, case data), append it to `NEEDS_FROM_USER.md` with exact instructions, mark the packet `BLOCKED-ON-USER` in `PROGRESS.md`, and move on to the next packet.
+5. Keep the code simple enough for one developer to understand (Spec §1). No speculative abstraction beyond the seams listed here.
+6. Follow the repo structure in Spec §31 and the data models in Spec §11. Prompts go in `ask_alie/agents/prompts/*.md`.
+7. Commit after every completed packet with message `packet <id>: <summary>`.
+8. If the full suite is red for a reason unrelated to the current packet, fix that first.
+9. Stop the loop when all packets are done or `BLOCKED-ON-USER`, then write `HANDOFF.md` summarizing state, blocked items, and how to run everything.
+
+## 2. Decisions pre-made (do not re-litigate)
+
+- **PDF extraction:** PyMuPDF primary. (Spec §40 comparison happens later as a live experiment, not now.)
+- **Storage:** JSON/JSONL files only. No SQLite unless file coordination actually breaks (Spec §10).
+- **Tokenization:** regex + rule-based recognizers first (dates fr/en, RAMQ, phone, email, claim numbers, name lists from a per-case dictionary). spaCy/Presidio are optional upgrades, off by default, so the install stays light.
+- **Date representation:** Variant A (opaque tokens) is the default; Variant B (relative metadata) implemented behind a config flag so the experiment is one switch (Spec §13.3).
+- **Model access seam:** all model calls go through one interface with a `MockModelClient` (deterministic, fixture-driven) and a `ClaudeAgentClient` (claude-agent-sdk). Tests use the mock exclusively.
+- **Provider portability:** the Claude Agent SDK is the POC runtime, but nothing outside `ask_alie/llm/` and `ask_alie/agents/runtime/` may import an SDK. All agent logic (prompts, tool implementations, schemas, orchestration policy, dispatcher) is provider-neutral so an OpenAI Agents SDK runtime can be added later as one adapter module. Do NOT build the OpenAI adapter now — only keep the seams clean (enforced by an import-boundary test).
+- **UI:** FastAPI + Jinja2 templates + htmx (single Python stack, no Node). Streamlit/Next.js rejected to keep one runtime.
+- **Python:** 3.12, `pyproject.toml`, `pytest`, `ruff` for lint.
+- **Language:** code/comments in English; user-facing chronology strings in French per Spec.
+
+## 3. Required seams (build these, they make autonomy and provider portability possible)
+
+- `ask_alie/llm/client.py` — `ModelClient` protocol: `structured(prompt, schema, ...)`. Implementations: `MockModelClient` (canned Pydantic objects from fixture files keyed by scenario), `ClaudeModelClient`; an `OpenAIModelClient` slots in later with zero caller changes. Readers/Scout/Gap/Curator single-shot calls use only this protocol.
+- `ask_alie/tools/registry.py` — every case tool is a plain Python function plus a neutral `ToolSpec` (name, description, JSON-schema params, callable). The Claude in-process MCP server is **generated** from this registry; an OpenAI function-tools adapter can be generated from the same registry later. No tool implementation imports any SDK.
+- `ask_alie/agents/specs.py` — neutral `AgentSpec` dataclass (name, prompt path, tool names, model tier, output schema) for scout/gap/curator/reader. Claude `AgentDefinition`s are built from these; OpenAI `Agent(...)` objects can be too.
+- `ask_alie/agents/runtime/` — `AgentRuntime` protocol: `run_orchestration(case_dir, specs, tools, limits) -> RunResult` with a progress-event callback. Implementations: `mock.py` (scripted deterministic orchestration used by tests and `--mock`), `claude.py` (Agent SDK session per Spec §22.4). `openai.py` is a documented stub raising `NotImplementedError` — added only if/when we decide to compare providers.
+- `ask_alie/ingest/ocr.py` — OCR behind `OcrEngine` protocol; `TesseractEngine` + `NullOcrEngine` (marks page `ocr_unavailable`, keeps going — Spec §34 OCR failure).
+- `tests/fixtures/` — synthetic 5–10 page PDFs **generated by a script** (`tests/fixtures/make_fixtures.py`, run at test-session start): a fake French consultation note, an imaging report, a CNESST-style decision, a blank page, a garbage/scanned-look page. These stand in for Case 1 until the real bundle exists.
+- `workspace/` gitignored; fixture cases build into a temp dir in tests.
+
+---
+
+## 4. Packet backlog
+
+### Phase 0 — Bootstrap
+
+**P0.1 Repo skeleton.** `git init`; `pyproject.toml` (deps: pydantic v2, fastapi, uvicorn, jinja2, pymupdf, pytest, ruff, click or argparse, claude-agent-sdk, pytesseract optional-extra); package layout per Spec §31; `.env.example` (`ANTHROPIC_API_KEY=`, `ASK_ALIE_WORKSPACE=workspace`, `TESSERACT_CMD=`); `.gitignore` (workspace/, .env, __pycache__); `CLAUDE.md` with Spec §32 content; empty `.claude/skills/`.
+*Exit:* `python -m ask_alie --help` lists subcommands (`ingest tokenize readers run evaluate serve`, stubs OK); `pytest` runs green (≥1 smoke test); `ruff check` clean; initial commit made.
+
+**P0.2 Fixture generator.** `tests/fixtures/make_fixtures.py` builds the synthetic PDFs (native-text pages via PyMuPDF; one page rendered as image-only to force the OCR path; realistic French dates/names/RAMQ-format strings — all fake).
+*Exit:* test asserts fixtures build and contain expected page counts and text.
+
+### Phase 1 — Workspace & models
+
+**P1.1 Core data models.** Pydantic models for manifest, page record, report unit, candidate event, agent task, curation assignment, reviewer decision — field-for-field per Spec §11. JSON/JSONL (de)serialization helpers.
+*Exit:* round-trip serialization tests for every model, including unknown-field tolerance.
+
+**P1.2 Workspace layout.** `workspace/paths.py` + `manifest.py`: create the full case directory tree of Spec §10; content-hash documents; write/read manifest; append-only JSONL stores (`tasks.jsonl`, `events.jsonl`, `decisions.jsonl`, `logs/run.jsonl`) with a small `JsonlStore` util.
+*Exit:* test creates a case workspace from fixture PDFs, re-opens it, and the manifest matches (idempotent re-ingest by sha256).
+
+**P1.3 Run log.** `log_action(actor, action, targets, reason, result)` per Spec §33; every later packet uses it.
+*Exit:* unit test on entry shape.
+
+### Phase 2 — Ingest
+
+**P2.1 Native extraction + quality.** PyMuPDF page text; quality scorer implementing Spec §12.3 (chars, printable ratio, alpha ratio, word count, French/English word hits, garbage-pattern check) returning a 0–1 score and pass/fail; page PNG rendering.
+*Exit:* fixture tests — text pages pass, blank page fails, garbage page fails.
+
+**P2.2 OCR fallback.** `OcrEngine` seam; Tesseract `fra+eng` when available (auto-detect binary or `TESSERACT_CMD`); `NullOcrEngine` otherwise; page record gets `extraction_method`, quality, raw/safe paths, flags. Raw text preserved unaltered; whitespace-normalized copy alongside (Spec §12.4).
+*Exit:* with OCR unavailable, image-only fixture page is flagged `ocr_unavailable` and the run continues; unit tests for routing logic. If Tesseract is present on this machine, a live OCR test runs; otherwise it auto-skips.
+
+**P2.3 `ingest` CLI.** `python -m ask_alie ingest --input <dir> --case-id <id>` wires P1–P2 into Milestone-1/2 behavior; prints Spec §38 Step-1 style summary (total pages, native usable, OCR required, empty/unreadable, duration).
+*Exit:* integration test: ingest fixture dir → complete workspace, summary numbers correct.
+
+### Phase 3 — Tokenization & privacy
+
+**P3.1 Date detection.** French + English date patterns (`16 juillet 2025`, `2025-07-16`, `16/07/2025`, `le 16 juillet dernier` excluded — only absolute dates), normalization to ISO, registry entries per Spec §13.2 with char offsets and confidence.
+*Exit:* table-driven tests over ≥25 date formats, including OCR-mangled variants (`l6 juillet 2O25` → low confidence or miss, never wrong normalization).
+
+**P3.2 Entity tokenization.** Recognizers: RAMQ, phone, email, postal code, claim/file numbers, and name/facility/employer replacement from a per-case `known_entities.json` dictionary (built manually or from manifest hints). Stable tokens `[[PERSON_01]]` etc., consistent case-wide.
+*Exit:* same entity string on two pages → same token; registry round-trips; no raw identifiers remain in `.safe.txt` for fixture case.
+
+**P3.3 Safe text + restoration.** Write `page_XXXX.safe.txt`; `restore_dates(event)` maps token → normalized date, marks `date_unresolved` when missing (Spec §13.4). Variant B metadata generation behind config flag.
+*Exit:* tokenize → restore round-trip test on fixture case; unresolved-token path tested. `tokenize` CLI command works.
+
+### Phase 4 — Reader baseline (mock-first)
+
+**P4.1 Report map import.** `report_map.json` reader/writer; manual-units path (Spec §38 Step 3): a simple `reports import --pages 1-3,4-7,...` or JSON file input; report unit `.safe.txt` assembly with page markers.
+*Exit:* fixture case gets 3 manual report units with correct concatenated safe text.
+
+**P4.2 Model client seam.** `ModelClient` protocol + `MockModelClient` (fixture-keyed structured responses) + `ClaudeModelClient` skeleton using claude-agent-sdk `query()` with `output_format` from Pydantic schemas (Spec §22.5). SDK imports are lazy and confined to the implementation module; a clear error without `ANTHROPIC_API_KEY`. Add the import-boundary test (§2 provider portability): nothing outside `ask_alie/llm/` and `ask_alie/agents/runtime/` imports `claude_agent_sdk` (or `openai`).
+*Exit:* mock returns validated `ReaderResult`; Claude client unit-tested for prompt/schema assembly only (no network); import-boundary test green.
+
+**P4.3 Reader worker + dispatcher.** Reader prompt file per Spec §17.4; `ReaderResult` schema per Spec §17.3; async dispatcher per Spec §23.3 (semaphore, per-report isolation, save result, append candidates, failure records, retry-once then simpler-prompt-once then mark failed per Spec §34); batch summary shape per Spec §21.2 `dispatch_readers`.
+*Exit:* integration test with mock client: dispatch 3 fixture reports → results saved, candidates appended with correct `origin`, one injected failure retried and surfaced; concurrency respected (test with instrumented mock).
+
+**P4.4 Candidate store + duplicates.** `events.jsonl` append/read; duplicate *linking* (same date token + similar summary → `duplicate_of`), never deletion (Spec §5.3, §34).
+*Exit:* duplicate pair linked, both retained.
+
+**P4.5 `readers` CLI.** `python -m ask_alie readers --case <dir> --concurrency 5 [--mock]` runs the initial pass over all proposed units.
+*Exit:* mock end-to-end on fixture case: ingest → tokenize → import units → readers → events.jsonl populated with restored dates.
+
+### Phase 5 — Evaluation harness
+
+**P5.1 Gold format + matching.** Gold events JSONL loader; matcher: normalized-date match + token-overlap/semantic-lite similarity + key-fact overlap; `matches.jsonl` per Spec §28.3; uncertain matches flagged for manual adjudication rather than auto-decided.
+*Exit:* synthetic gold set tests: full match, wrong-date, meaning-partial, miss.
+
+**P5.2 Metrics + run summary.** All 11 Spec §4 metrics computed (those needing live runs report `n/a` cleanly); `metrics.json` + generated `run_summary.md`; `evaluate` CLI.
+*Exit:* metrics test against hand-computed values on synthetic data. Gold files are read **only** by the eval module — enforce with a test asserting no other module imports `evals.gold` (Spec §28.2).
+
+### Phase 6 — Tools, agents, orchestrator
+
+**P6.1 Tool layer (provider-neutral).** All Spec §21 tools as plain functions + `ToolSpec` registry entries (§3) over the workspace (get_case_state, inspect_document, read_pages, inspect_report, search_case (plain-text/regex search over safe pages), list_candidates, save_report_map, update_report_units (split/merge/resize/relabel with reader-result invalidation per Spec §34), dispatch_readers, create_tasks, resolve_tasks, run_curator, finish_case). Each: concise structured returns, big payloads written to files with paths returned.
+*Exit:* unit tests for every tool against fixture workspace, including split-invalidates-affected-reader-results.
+
+**P6.2 SDK adapters + agent specs.** Neutral `AgentSpec`s for scout/gap-reviewer/curator (§3); Claude adapter: `create_sdk_mcp_server` generated from the ToolSpec registry, `AgentDefinition`s generated from AgentSpecs per Spec §22.2; prompt files for orchestrator (Spec §15.5), scout (§16), gap (§18), curator (§19), reader re-read (§17.5) — prompts are provider-neutral markdown.
+*Exit:* server constructs from the registry; tool registration list matches Spec §22.4 allowed_tools; prompts exist and load; AgentSpec→AgentDefinition mapping tested. (No live session.)
+
+**P6.3 Scout pipeline (mock-first).** Packet builder (first 1500 + last 500 chars/page, Spec §16.5); Scout result schema; report-map writer honoring uncertain ranges; orchestrator can regenerate units.
+*Exit:* mock Scout on fixture case proposes units; uncertain range handling tested (overlapping fallback unit, Spec §34).
+
+**P6.4 Gap + Curator services (mock-first).** Gap input assembly (zero-event reports, date-token coverage vs cited events, cross-references, flags — Spec §18.4 signals computed locally as *facts*, judgment left to the model); task creation/execution loop with limits from Spec §15.4; Curator run producing `assignments.jsonl` with mandatory-default enforcement from `alie-legal-baseline-v1.yaml` (Spec §26) applied as a *post-check* (never silently dropping, only flagging disagreement).
+*Exit:* mock gap round creates tasks → dispatcher executes reread task → recovered event carries `origin.pass=2`; curator assigns queues; baseline mandatory categories verified by test.
+
+**P6.5 Orchestrator runner.** `python -m ask_alie run --case <dir> [--mock]` selects an `AgentRuntime` (§3): `--mock` uses `MockRuntime`, a scripted deterministic orchestration (scout → readers → gap → follow-ups → curator → finish) through the same tool layer; default uses `ClaudeRuntime` — the real `ClaudeAgentOptions` session per Spec §22.4 with execution limits (§15.4), progress streaming to the log, session-ID persistence and resume (§22.6). A `--runtime openai` flag parses but reports not-implemented.
+*Exit:* mock full-case run on fixtures completes end to end and `finish_case` writes outputs + metrics; live path code-reviewed and unit-tested for options assembly, marked `BLOCKED-ON-USER` for execution.
+
+### Phase 7 — Curation output, export, review UI
+
+**P7.1 Exports.** `chronology.json/csv/html` per Spec §10/§27.3 columns; French labels; secondary queue and unresolved queue included distinctly; HTML is a single self-contained file.
+*Exit:* export tests on mock-run output; CSV opens with correct columns; HTML contains quotes + page refs.
+
+**P7.2 Review UI.** FastAPI `serve` command: case list, run screen (documents/progress/activity/report map/candidates/flags panels reading workspace files), chronology screen with expandable rows, secondary + unresolved queues, reviewer actions (accept/edit/move/reject/merge/duplicate/reason) appending to `decisions.jsonl` per Spec §11.7, re-export after review.
+*Exit:* route tests via FastAPI TestClient covering every reviewer action and both queues; `serve` boots against the mock-run fixture case.
+
+**P7.3 Progress view.** Live-ish progress endpoint polling workspace state (Spec §7.2 counters) rendered on the run screen.
+*Exit:* counters test against a mid-state fixture workspace.
+
+### Phase L — Live (each `BLOCKED-ON-USER` until env/data exist)
+
+**PL.1 Env check command.** `python -m ask_alie doctor`: verifies API key, claude-agent-sdk import, Tesseract + fra/eng packs, Case 1 bundle path, gold file isolation. Written now, runnable by the user anytime.
+*Exit (unblocked part):* doctor runs and reports precisely what's missing.
+
+**PL.2 Experiment 0 — ingest inventory on Case 1.** (Needs Case 1 bundle + Tesseract.)
+**PL.3 Experiment 1 — reader baseline on Case 1.** (Needs API key.) Score vs gold: reference is 50/74 captured, 187 rows.
+**PL.4 Experiment 2 — Scout segmentation comparison.**
+**PL.5 Experiment 3 — adaptive orchestrator; measure events recovered post-first-pass.**
+**PL.6 Experiment 4 — curator; queue metrics + review time.**
+**PL.7 Stability runs** (each major experiment ×2, Spec §28.5) and **Experiments 5–6** (personalization pilot, blind validation on Cases 2–3) — only after the user reviews Experiment 3 results.
+
+---
+
+## 5. What the user must provide (mirrored in NEEDS_FROM_USER.md as encountered)
+
+- `ANTHROPIC_API_KEY` in `.env`
+- Tesseract install + `fra`/`eng` language packs (or `TESSERACT_CMD` path)
+- Case 1 bundle at `C:\Dev\ALIE\chrono-lab\bundles\case1_cnesst\inputs` (and gold JSONL path) — or corrected paths
+- Go/no-go review between PL.5 and PL.7
+
+## 6. Definition of done for the autonomous portion
+
+All Phase 0–7 packets green under `pytest` with zero network access, `ruff` clean, mock end-to-end run producing a reviewable exported chronology from synthetic fixtures, UI serving it, and `HANDOFF.md` written. Live experiments then become a checklist the user can trigger one command at a time.
