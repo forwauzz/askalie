@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 import pytest
@@ -68,10 +67,18 @@ def test_ingest_cli(fixture_pdf_dir: Path, tmp_path: Path, capsys: pytest.Captur
     assert "case case_cli: 2 document(s)" in out
 
 
-@pytest.mark.skipif(shutil.which("tesseract") is None, reason="Tesseract not installed")
+@pytest.mark.skipif(not default_engine().available, reason="Tesseract not installed")
 def test_live_tesseract_on_image_only_page(fixture_pdf_dir: Path, tmp_path: Path) -> None:
     engine = default_engine()
     assert isinstance(engine, TesseractEngine)
     _, summary = ingest_case(fixture_pdf_dir, "case_live", tmp_path, ocr_engine=engine)
     # the image-only physio page should come back as readable text
     assert summary.ocr_pages >= 1
+
+
+def test_pick_langs_prefers_french() -> None:
+    from ask_alie.ingest.ocr import pick_langs
+
+    assert pick_langs({"fra", "eng", "osd"}) == "fra+eng"
+    assert pick_langs({"eng", "osd"}) == "eng"
+    assert pick_langs(set()) == "eng"

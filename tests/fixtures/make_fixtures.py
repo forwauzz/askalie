@@ -123,7 +123,18 @@ def build_fixtures(target: Path) -> dict[str, int]:
     b2 = fitz.open()
     _add_text_page(b2, DECISION_P1)
     _add_text_page(b2, DECISION_P2)
-    _add_image_only_page(b2, "PHYSIOTHÉRAPIE FICTIVE\nTraitement du 10 juillet 2025\nPatient : Jean Tremblay")
+    _add_image_only_page(
+        b2,
+        "PHYSIOTHÉRAPIE FICTIVE DE MONTRÉAL\n"
+        "Note de traitement\n\n"
+        "Patient : Jean Tremblay\n"
+        "Date du traitement : 10 juillet 2025\n\n"
+        "Le patient se présente pour sa séance de physiothérapie pour la région\n"
+        "lombaire. Les exercices de renforcement et les étirements sont poursuivis.\n"
+        "La douleur est en diminution depuis la dernière visite et la mobilité du\n"
+        "tronc est améliorée. Le plan de traitement est maintenu à raison de deux\n"
+        "séances par semaine jusqu'à la prochaine évaluation médicale.",
+    )
     _add_text_page(b2, GARBAGE_TEXT)
     b2.save(target / "bundle_02.pdf")
     b2.close()

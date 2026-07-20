@@ -44,6 +44,22 @@ def run_checks() -> list[tuple[str, bool, str]]:
             tesseract or "not found - winget install UB-Mannheim.TesseractOCR (fra+eng packs)",
         )
     )
+    if tesseract:
+        from ask_alie.ingest.ocr import installed_langs
+
+        langs = installed_langs(tesseract)
+        checks.append(
+            (
+                "Tesseract 'fra' language pack",
+                "fra" in langs,
+                f"installed langs: {', '.join(sorted(langs)) or 'none'}"
+                + (
+                    ""
+                    if "fra" in langs
+                    else " - French OCR degraded; add fra.traineddata to the tessdata folder"
+                ),
+            )
+        )
 
     checks.append(
         (
