@@ -47,7 +47,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Phase L — Live (needs user-provided env/data)
 - [x] PL.1 doctor command — done
-- [ ] PL.2 Experiment 0: Case 1 ingest inventory — BLOCKED-ON-USER (Case 1 bundle, Tesseract)
+- [x] PL.2 Experiment 0: Case 1 ingest inventory — done (2026-07-20: 363 pages / 13 docs; 115 native, 228 OCR fra+eng, 20 empty/unreadable; 280.8s. Tokenize: 174 unique dates, 123 unique entities)
 - [ ] PL.3 Experiment 1: reader baseline on Case 1 — BLOCKED-ON-USER (API key)
 - [ ] PL.4 Experiment 2: Scout comparison — BLOCKED-ON-USER
 - [ ] PL.5 Experiment 3: adaptive orchestrator — BLOCKED-ON-USER
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — PL.2 (Experiment 0) done on real Case 1. Tesseract wired (user install found off-PATH; fra.traineddata added to user tessdata via TESSDATA_PREFIX). Ingest: 363 pages / 13 documents → 115 native-usable (32%), 228 OCR-required (63%), 20 empty/unreadable (5%), 280.8s. Tokenize: 363 pages → 174 unique date tokens, 123 unique entity tokens (pattern recognizers only — no known_entities.json yet, so names are NOT tokenized; needed before any live reader run). Gold answer_key.pdf deliberately excluded from ingest (Spec §28.2). Review UI verified live against the real case. Remaining: PL.3+ need ANTHROPIC_API_KEY.
 
 - 2026-07-20 — P7.1–P7.3 done; AUTONOMOUS PORTION COMPLETE. Reviewer decision service (append-only replay: accept/edit/move/reject/merge/duplicate), default/secondary/unresolved queue splitting, JSON + Excel-friendly CSV + self-contained HTML exports with quotes and page refs, FastAPI review UI (case list, run screen with activity feed, chronology with per-row action forms, progress JSON endpoint), serve CLI. HANDOFF.md written. 92 tests green, ruff clean. Remaining packets are all BLOCKED-ON-USER (Phase L live experiments).
 

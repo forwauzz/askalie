@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "review-ui",
+      "runtimeExecutable": ".venv\\Scripts\\python",
+      "runtimeArgs": ["-m", "ask_alie", "serve", "--workspace", "workspace"],
+      "port": 8321
+    }
+  ]
+}
