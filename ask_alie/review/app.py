@@ -38,7 +38,7 @@ _STYLE = """
 body { font-family:Inter,'Segoe UI',system-ui,-apple-system,sans-serif; margin:0; display:flex;
        color:var(--text); background:var(--bg); font-size:14.5px; -webkit-font-smoothing:antialiased; }
 aside { width:248px; min-width:248px; background:var(--panel); border-right:1px solid var(--line);
-        height:100vh; position:sticky; top:0; padding:1rem .75rem; }
+        height:100vh; position:sticky; top:0; padding:1rem .75rem; display:flex; flex-direction:column; }
 aside .brand { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1rem;
         padding:.2rem .5rem 1.1rem; letter-spacing:.2px; }
 aside .brand i { width:22px; height:22px; border-radius:7px; background:var(--text); color:#fff;
@@ -187,7 +187,9 @@ def create_app(workspace_root: Path) -> FastAPI:
             d.name for d in sorted(cases_dir.iterdir()) if (d / "manifest.json").is_file()
         ]
 
-    def _shell(title: str, body: str, active_case: str | None = None) -> HTMLResponse:
+    def _shell(
+        title: str, body: str, active_case: str | None = None, active_nav: str = ""
+    ) -> HTMLResponse:
         items = "".join(
             f"<a class='item{' active' if cid == active_case else ''}' "
             f"href='/case/{cid}'>{_esc(cid)}</a>"
@@ -198,7 +200,11 @@ def create_app(workspace_root: Path) -> FastAPI:
             "<a class='item new' href='/'>+ New case</a>"
             "<div class='label'>Cases</div>"
             + (items or "<span class='item' style='color:var(--muted)'>No cases yet</span>")
-            + "</aside>"
+            + "<div style='flex:1'></div>"
+            "<div class='label'>Workspace</div>"
+            f"<a class='item{' active' if active_nav == 'skills' else ''}' href='/skills'>Skills</a>"
+            f"<a class='item{' active' if active_nav == 'settings' else ''}' href='/settings'>Settings</a>"
+            "</aside>"
         )
         return HTMLResponse(
             f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
@@ -220,6 +226,19 @@ def create_app(workspace_root: Path) -> FastAPI:
             f"<div class='sub'>{_esc(subtitle) or 'CNESST · SAAQ · IVAC medical-legal chronology'}</div></div>"
             f"<span class='status-chip' id='status-chip' style='color:var(--muted);font-size:.82rem'></span></div>"
             f"<div class='tabs'>{tab_html}</div></div>"
+        )
+
+    def _skills_note() -> str:
+        from ask_alie import config
+        from ask_alie.agents.skills import load_skills
+
+        skills = load_skills()
+        if not skills or not config.skills_enabled():
+            return ""
+        names = ", ".join(s.name for s in skills)
+        return (
+            f"Applies {len(skills)} specialized <a href='/skills'>skill"
+            f"{'s' if len(skills) != 1 else ''}</a> automatically ({_esc(names)})."
         )
 
     # ---------- pipelines (background threads) ----------
@@ -248,6 +267,88 @@ def create_app(workspace_root: Path) -> FastAPI:
             runtime, ctx = ClaudeRuntime(), ToolContext(paths=paths, client=ClaudeModelClient())
         asyncio.run(runtime.run_orchestration(ctx, {}, progress=progress))
         export_all(paths)
+
+    # ---------- skills & settings ----------
+
+    def _md_lite(body: str) -> str:
+        """Tiny renderer for skill bodies: # headers, - lists, paragraphs."""
+        out: list[str] = []
+        in_list = False
+        for raw_line in body.splitlines():
+            line = raw_line.strip()
+            if line.startswith("#"):
+                if in_list:
+                    out.append("</ul>")
+                    in_list = False
+                out.append(f"<h3>{_esc(line.lstrip('# '))}</h3>")
+            elif line.startswith("- "):
+                if not in_list:
+                    out.append("<ul>")
+                    in_list = True
+                out.append(f"<li>{_esc(line[2:])}</li>")
+            elif not line:
+                if in_list:
+                    out.append("</ul>")
+                    in_list = False
+            else:
+                out.append(f"<p>{_esc(line)}</p>")
+        if in_list:
+            out.append("</ul>")
+        return "".join(out)
+
+    @app.get("/skills", response_class=HTMLResponse)
+    async def skills_page() -> HTMLResponse:
+        from ask_alie import config
+        from ask_alie.agents.skills import load_skills
+
+        skills = load_skills()
+        enabled = config.skills_enabled()
+        cards = []
+        for skill in skills:
+            chips = "".join(
+                f"<span class='chip type'>{_esc(t)}</span> " for t in skill.applies_to
+            )
+            cards.append(
+                f"<div class='panel'><h2>{_esc(skill.name)}</h2>"
+                f"<p style='margin:.2rem 0 .7rem'>{_esc(skill.description)}</p>"
+                f"<div style='margin-bottom:.8rem'>{chips}</div>"
+                f"<details><summary>Method details</summary>"
+                f"<div style='font-size:.9rem;color:#3f3f46'>{_md_lite(skill.body)}</div></details></div>"
+            )
+        status = (
+            "<span class='chip ok'>active</span> Skills are applied automatically when a "
+            "document of a matching type is read."
+            if enabled
+            else "<span class='chip warn'>disabled</span> Set ASK_ALIE_SKILLS=on to re-enable."
+        )
+        body = (
+            "<div class='pagehead'><div class='row1'><div><h1>Skills</h1>"
+            "<div class='sub'>Specialized extraction methods ALIE applies to matching documents</div>"
+            "</div></div><div class='tabs'></div></div>"
+            f"<div class='wrap'><p style='color:var(--muted)'>{status}</p>"
+            + ("".join(cards) or "<div class='panel'><div class='empty'>No skills installed yet.</div></div>")
+            + "</div>"
+        )
+        return _shell("Skills — Ask ALIE", body, active_nav="skills")
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings_page() -> HTMLResponse:
+        from ask_alie.doctor import run_checks
+
+        rows = []
+        for name, ok, detail in run_checks():
+            chip = "<span class='chip ok'>ok</span>" if ok else "<span class='chip warn'>attention</span>"
+            rows.append(f"<tr><td>{_esc(name)}</td><td>{chip}</td><td>{_esc(detail)}</td></tr>")
+        body = (
+            "<div class='pagehead'><div class='row1'><div><h1>Settings</h1>"
+            "<div class='sub'>Engine, authentication and system health</div></div></div>"
+            "<div class='tabs'></div></div>"
+            "<div class='wrap'><div class='panel' style='padding:0'>"
+            "<table><thead><tr><th>Component</th><th>Status</th><th>Detail</th></tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table></div></div>"
+        )
+        return _shell("Settings — Ask ALIE", body, active_nav="settings")
 
     # ---------- landing ----------
 
@@ -417,6 +518,7 @@ def create_app(workspace_root: Path) -> FastAPI:
          href='/case/{_esc(case_id)}/chronology'>Open chronology</a>
       <span id='primary-note' style='color:var(--muted);font-size:.86rem'></span>
     </div>
+    <div style='margin-top:.7rem;font-size:.82rem;color:var(--muted)'>{_skills_note()}</div>
   </div>
 
   <div class='panel'><h2>Overview</h2>

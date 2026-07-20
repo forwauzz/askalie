@@ -71,6 +71,24 @@ def test_case_list_and_run_screen(client: TestClient) -> None:
     assert "Generate chronology" in run_screen.text
 
 
+def test_skills_and_settings_pages(client: TestClient) -> None:
+    skills_page = client.get("/skills")
+    assert skills_page.status_code == 200
+    assert "read-cnesst-decision" in skills_page.text
+    assert "administrative_decision" in skills_page.text
+    assert "Method details" in skills_page.text
+
+    settings = client.get("/settings")
+    assert settings.status_code == 200
+    assert "Model auth" in settings.text and "Model tiers" in settings.text
+
+    # sidebar navigation present everywhere; case screen mentions active skills
+    home = client.get("/")
+    assert "/skills" in home.text and "/settings" in home.text
+    case_screen = client.get("/case/case_ui")
+    assert "specialized" in case_screen.text and "read-cnesst-decision" in case_screen.text
+
+
 def test_progress_json(client: TestClient) -> None:
     state = client.get("/case/case_ui/progress").json()
     assert state["case_id"] == "case_ui"
