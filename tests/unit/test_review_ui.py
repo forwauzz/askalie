@@ -62,13 +62,13 @@ def test_export_all_files(paths: CasePaths) -> None:
 
 def test_case_list_and_run_screen(client: TestClient) -> None:
     home = client.get("/")
-    assert home.status_code == 200 and "case_ui" in home.text
-    assert "Nouveau dossier" in home.text  # upload form on the landing page
+    assert home.status_code == 200 and "case_ui" in home.text  # sidebar case list
+    assert "New case" in home.text and "Ready to build a chronology?" in home.text
 
     run_screen = client.get("/case/case_ui")
     assert run_screen.status_code == 200
-    assert "Activité" in run_screen.text and "run_curator" in run_screen.text
-    assert "Générer la chronologie" in run_screen.text
+    assert "Activity" in run_screen.text and "run_curator" in run_screen.text
+    assert "Generate chronology" in run_screen.text
 
 
 def test_progress_json(client: TestClient) -> None:
@@ -85,7 +85,7 @@ def test_progress_json(client: TestClient) -> None:
 
 def test_chronology_and_reviewer_actions(client: TestClient, paths: CasePaths) -> None:
     page = client.get("/case/case_ui/chronology")
-    assert page.status_code == 200 and "File principale" in page.text
+    assert page.status_code == 200 and "Main timeline" in page.text
 
     rows = build_rows(paths)
     target = rows[0]["event_id"]
@@ -199,6 +199,6 @@ def test_full_app_flow_upload_to_chronology(
     assert state["candidate_count"] > 0 and state["reports_read"] > 0
 
     review = app_client.get(f"{case_url}/chronology")
-    assert review.status_code == 200 and "File principale" in review.text
+    assert review.status_code == 200 and "Main timeline" in review.text
     # build already exported the chronology files
     assert (case_paths.output_dir / "chronology.csv").exists()
