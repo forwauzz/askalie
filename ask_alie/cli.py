@@ -15,7 +15,7 @@ COMMANDS: dict[str, str] = {
     "doctor": "Check environment prerequisites for live runs",
 }
 
-IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize", "reports", "readers"})
+IMPLEMENTED: frozenset[str] = frozenset({"ingest", "tokenize", "reports", "readers", "evaluate"})
 
 # Packet that will replace each stub, per PLAN.md.
 _PENDING_PACKET = {
@@ -51,6 +51,9 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--concurrency", type=int, default=5)
             sub.add_argument("--mock", action="store_true", help="Use the offline heuristic mock")
             sub.add_argument("--reports", default=None, help="Comma-separated report ids (default: all)")
+        elif name == "evaluate":
+            sub.add_argument("--case", required=True)
+            sub.add_argument("--gold", required=True, help="Gold events JSONL path")
     return parser
 
 
@@ -121,5 +124,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(summary.render())
         return 0 if summary.failed == 0 else 1
+    if args.command == "evaluate":
+        from pathlib import Path
+
+        from ask_alie.evals.metrics import evaluate_case
+        from ask_alie.evals.report import render_run_summary
+        from ask_alie.workspace.paths import CasePaths
+
+        report = evaluate_case(CasePaths(root=Path(args.case)), Path(args.gold))
+        print(render_run_summary(report))
+        return 0
     print(f"'{args.command}' is not implemented yet (arrives with packet {_PENDING_PACKET[args.command]}).")
     return 1

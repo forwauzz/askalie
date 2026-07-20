@@ -30,8 +30,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P4.5 readers CLI — done
 
 ## Phase 5 — Evaluation harness
-- [ ] P5.1 Gold format + matching — todo
-- [ ] P5.2 Metrics + run summary — todo
+- [x] P5.1 Gold format + matching — done
+- [x] P5.2 Metrics + run summary — done
 
 ## Phase 6 — Tools, agents, orchestrator
 - [ ] P6.1 MCP tool layer — todo
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P5.1–P5.2 done. Gold loader (eval-layer-only, guarded by import test per Spec §28.2), date+similarity+key-fact matcher with wrong-date detection and adjudication flags, all Spec §4 metrics (manual/live ones report null honestly), matches.jsonl + metrics.json + run_summary.md artifacts, `evaluate` CLI. Hand-computed metric assertions on synthetic full/wrong-date/partial/miss/extra cases. 68 tests green, ruff clean.
 
 - 2026-07-20 — P4.1–P4.5 done. Report map + manual unit import with page-marker text assembly; ModelClient seam (Mock / Claude, lazy SDK import, import-boundary test enforcing PLAN §2); reader runner with Spec §34 retry ladder (retry → simplified prompt → fail surfaced); bounded async dispatcher writing results, assigning event IDs/origins, restoring dates, recording failures; candidate store; duplicate linking (never deleting); HeuristicReaderMock enabling offline end-to-end; `reports` + `readers` CLI. Mock e2e on fixtures: 3 reports → candidates with restored dates. 64 tests green, ruff clean.
 

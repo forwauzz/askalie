@@ -1,0 +1,114 @@
+"""Gold-to-candidate matching (Spec §28.3).
+
+Deterministic first pass: date match + word-overlap similarity + key-fact
+overlap. Borderline similarity is flagged for manual adjudication rather than
+silently decided.
+"""
+
+from __future__ import annotations
+
+import re
+
+from ask_alie.evals.gold import GoldEvent
+from ask_alie.events.models import CandidateEvent
+from ask_alie.serialization import AlieModel
+
+_WORD = re.compile(r"[a-zà-ÿ]{3,}", re.IGNORECASE)
+_FULL_THRESHOLD = 0.5
+_PARTIAL_THRESHOLD = 0.25
+
+
+class MatchRecord(AlieModel):
+    gold_event_id: str
+    candidate_event_id: str | None
+    date_match: bool = False
+    meaning_match: str = "none"  # full | partial | none
+    needs_adjudication: bool = False
+    reviewer: str | None = None
+    notes: str | None = None
+
+
+def _words(text: str) -> set[str]:
+    return {w.lower() for w in _WORD.findall(text)}
+
+
+def _similarity(gold: GoldEvent, candidate: CandidateEvent) -> float:
+    gold_words = _words(gold.description)
+    candidate_words = _words(candidate.summary_fr)
+    if not gold_words or not candidate_words:
+        return 0.0
+    jaccard = len(gold_words & candidate_words) / len(gold_words | candidate_words)
+    if gold.key_facts:
+        summary = candidate.summary_fr.casefold()
+        fact_hits = sum(1 for fact in gold.key_facts if fact.casefold() in summary)
+        fact_ratio = fact_hits / len(gold.key_facts)
+        return max(jaccard, fact_ratio)
+    return jaccard
+
+
+def _classify(score: float) -> tuple[str, bool]:
+    if score >= _FULL_THRESHOLD:
+        return "full", False
+    if score >= _PARTIAL_THRESHOLD:
+        return "partial", True  # uncertain: manual adjudication
+    return "none", False
+
+
+def match_events(
+    gold_events: list[GoldEvent], candidates: list[CandidateEvent]
+) -> list[MatchRecord]:
+    records: list[MatchRecord] = []
+    used_candidates: set[str] = set()
+
+    def best_match(
+        gold: GoldEvent, pool: list[CandidateEvent]
+    ) -> tuple[CandidateEvent | None, float]:
+        best: CandidateEvent | None = None
+        best_score = 0.0
+        for candidate in pool:
+            if candidate.event_id in used_candidates:
+                continue
+            score = _similarity(gold, candidate)
+            if score > best_score:
+                best, best_score = candidate, score
+        return best, best_score
+
+    for gold in gold_events:
+        same_date = [c for c in candidates if c.event_date == gold.date]
+        candidate, score = best_match(gold, same_date)
+        meaning, uncertain = _classify(score)
+        if candidate is not None and meaning != "none":
+            used_candidates.add(candidate.event_id)
+            records.append(
+                MatchRecord(
+                    gold_event_id=gold.gold_event_id,
+                    candidate_event_id=candidate.event_id,
+                    date_match=True,
+                    meaning_match=meaning,
+                    needs_adjudication=uncertain,
+                )
+            )
+            continue
+
+        # no same-date match: look for the event under a wrong date
+        other_date = [c for c in candidates if c.event_date != gold.date]
+        candidate, score = best_match(gold, other_date)
+        meaning, uncertain = _classify(score)
+        if candidate is not None and meaning == "full":
+            used_candidates.add(candidate.event_id)
+            records.append(
+                MatchRecord(
+                    gold_event_id=gold.gold_event_id,
+                    candidate_event_id=candidate.event_id,
+                    date_match=False,
+                    meaning_match=meaning,
+                    needs_adjudication=uncertain,
+                    notes="wrong date",
+                )
+            )
+        else:
+            records.append(
+                MatchRecord(gold_event_id=gold.gold_event_id, candidate_event_id=None)
+            )
+
+    return records
