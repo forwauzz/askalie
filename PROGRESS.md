@@ -34,7 +34,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P5.2 Metrics + run summary — done
 
 ## Phase 6 — Tools, agents, orchestrator
-- [ ] P6.1 MCP tool layer — todo
+- [x] P6.1 Tool layer (provider-neutral) — done (includes curator service from P6.4, needed by run_curator)
 - [ ] P6.2 SDK server + agent definitions — todo
 - [ ] P6.3 Scout pipeline (mock-first) — todo
 - [ ] P6.4 Gap + Curator services (mock-first) — todo
@@ -56,6 +56,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P6.1 done. All 13 Spec §21 tools as plain async functions + ToolSpec registry (no SDK imports): case state, inspect/read/search, report map save/replace, update_report_units (split/merge/resize/relabel/mark_uncertain with reader-result invalidation + stale flagging, never deletion), task lifecycle, dispatch_readers wrapper, run_curator, finish_case writing chronology.json. Curator service with baseline mandatory-default post-check that forces default + flags disagreement, and defaults unassigned events. 75 tests green, ruff clean. Note: baseline config is a Python constant (curation/baseline.py) instead of YAML to avoid a pyyaml dep.
 
 - 2026-07-20 — P5.1–P5.2 done. Gold loader (eval-layer-only, guarded by import test per Spec §28.2), date+similarity+key-fact matcher with wrong-date detection and adjudication flags, all Spec §4 metrics (manual/live ones report null honestly), matches.jsonl + metrics.json + run_summary.md artifacts, `evaluate` CLI. Hand-computed metric assertions on synthetic full/wrong-date/partial/miss/extra cases. 68 tests green, ruff clean.
 

@@ -16,3 +16,6 @@ class CandidateStore:
 
     def append_events(self, events: list[CandidateEvent]) -> None:
         self._store.append_many(events)
+
+    def rewrite(self, events: list[CandidateEvent]) -> None:
+        self._store.rewrite(events)
