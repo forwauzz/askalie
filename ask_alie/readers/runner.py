@@ -18,8 +18,15 @@ class ReaderFailure(RuntimeError):
         self.attempts = attempts
 
 
-def reader_system_prompt() -> str:
-    return (_PROMPTS_DIR / "reader.md").read_text(encoding="utf-8")
+def reader_system_prompt(document_type: str | None = None) -> str:
+    base = (_PROMPTS_DIR / "reader.md").read_text(encoding="utf-8")
+    from ask_alie import config
+    from ask_alie.agents.skills import skills_for
+
+    if config.skills_enabled():
+        for skill in skills_for(document_type):
+            base += f"\n\n## Skill: {skill.name}\n\n{skill.body}\n"
+    return base
 
 
 def build_reader_prompt(
@@ -49,7 +56,7 @@ async def run_reader(
 
     Returns (result, attempts). Raises ReaderFailure after three failed attempts.
     """
-    system = reader_system_prompt()
+    system = reader_system_prompt(unit.document_type)
     last_error: Exception | None = None
     for attempt in range(1, 4):
         simplified = attempt == 3
