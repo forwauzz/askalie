@@ -64,6 +64,17 @@ def build_rows(paths: CasePaths) -> list[dict[str, Any]]:
         decisions.setdefault(decision.event_id, []).append(decision)
     entities = load_entity_registry(paths)
 
+    # map report -> source document filename for client-facing display
+    from ask_alie.reports.map import load_report_map
+    from ask_alie.workspace.manifest import load_manifest
+
+    doc_names: dict[str, str] = {}
+    report_docs: dict[str, str] = {}
+    if paths.manifest.exists():
+        doc_names = {d.document_id: d.filename for d in load_manifest(paths).documents}
+    for unit in load_report_map(paths):
+        report_docs[unit.report_id] = doc_names.get(unit.document_id, unit.document_id)
+
     rows: list[dict[str, Any]] = []
     for event in events:
         assignment = assignments.get(event.event_id)
@@ -100,6 +111,7 @@ def build_rows(paths: CasePaths) -> list[dict[str, Any]]:
                 "summary": summary,
                 "author": author,
                 "report_id": event.report_id,
+                "source_document": report_docs.get(event.report_id, event.report_id),
                 "source_pages": event.source_pages,
                 "quote": event.quote,
                 "quote_page": event.quote_page,

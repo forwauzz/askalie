@@ -1,9 +1,9 @@
 """Ask ALIE — local client-facing app (Spec §7, §27, §42).
 
-ChatGPT-style shell: sidebar of cases, clean centered content, one primary
-action per step. Flow: create a case → upload documents → watch processing
-(native text + Tesseract OCR live) → generate the chronology → review/export.
-UI chrome is English; extracted chronology content is French (Québec files).
+Legal-workspace product shell (Legora-style): refined sidebar, matter pages
+with tabs (Overview / Documents / Chronology), and the chronology as a rich,
+filterable, year-grouped table with source excerpts and original document
+names. UI chrome is English; extracted chronology content is French.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import html
 import json
 import re
 import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -30,84 +31,138 @@ from ask_alie.workspace.paths import CasePaths
 from ask_alie.workspace.runlog import log_action
 
 _STYLE = """
-:root { --bg:#fff; --side:#f9f9f9; --line:#e7e7e7; --text:#0d0d0d; --muted:#8f8f95;
-        --hover:#ececec; --green:#10a37f; --amber:#c07d1f; --red:#c04545; }
+:root { --bg:#fafafa; --panel:#fff; --line:#e9e9ec; --text:#141417; --muted:#8a8a93;
+        --soft:#f4f4f6; --green:#0e7a5f; --green-bg:#e7f3ef; --amber:#a3691a; --amber-bg:#faf1e2;
+        --red:#b04343; --red-bg:#f9e9e9; --blue:#3556a8; --blue-bg:#e9eefb; }
 * { box-sizing:border-box; }
-html,body { height:100%; }
-body { font-family:'Segoe UI',system-ui,-apple-system,sans-serif; margin:0; color:var(--text);
-       background:var(--bg); font-size:15px; display:flex; }
-aside { width:256px; min-width:256px; background:var(--side); border-right:1px solid var(--line);
-        height:100vh; position:sticky; top:0; padding:.9rem .7rem; display:flex; flex-direction:column; }
-aside .brand { font-weight:700; font-size:1.05rem; padding:.4rem .55rem .9rem; }
-aside a.item { display:block; padding:.45rem .6rem; border-radius:9px; color:var(--text);
-        text-decoration:none; font-size:.9rem; margin-bottom:2px; white-space:nowrap;
+body { font-family:Inter,'Segoe UI',system-ui,-apple-system,sans-serif; margin:0; display:flex;
+       color:var(--text); background:var(--bg); font-size:14.5px; -webkit-font-smoothing:antialiased; }
+aside { width:248px; min-width:248px; background:var(--panel); border-right:1px solid var(--line);
+        height:100vh; position:sticky; top:0; padding:1rem .75rem; }
+aside .brand { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1rem;
+        padding:.2rem .5rem 1.1rem; letter-spacing:.2px; }
+aside .brand i { width:22px; height:22px; border-radius:7px; background:var(--text); color:#fff;
+        font-style:normal; display:flex; align-items:center; justify-content:center; font-size:.75rem; }
+aside a.item { display:block; padding:.48rem .6rem; border-radius:8px; color:var(--text);
+        text-decoration:none; font-size:.88rem; margin-bottom:2px; white-space:nowrap;
         overflow:hidden; text-overflow:ellipsis; }
-aside a.item:hover { background:var(--hover); }
-aside a.item.active { background:#e4e4e7; }
-aside .label { font-size:.72rem; color:var(--muted); padding:.9rem .6rem .3rem;
-        text-transform:uppercase; letter-spacing:.5px; }
-aside a.new { border:1px solid var(--line); background:#fff; font-weight:600; }
+aside a.item:hover { background:var(--soft); }
+aside a.item.active { background:#ededf0; font-weight:600; }
+aside .label { font-size:.68rem; color:var(--muted); padding:1rem .6rem .35rem;
+        text-transform:uppercase; letter-spacing:.7px; font-weight:600; }
+aside a.new { border:1px solid var(--line); font-weight:600; text-align:center; }
 .content { flex:1; min-height:100vh; overflow-y:auto; }
-.wrap { max-width:860px; margin:0 auto; padding:2.2rem 2rem 4rem; }
-.hero { text-align:center; margin:14vh auto 0; max-width:640px; }
-.hero h1 { font-size:1.9rem; font-weight:600; margin:0 0 .4rem; }
-.hero p { color:var(--muted); margin:0 0 2rem; }
-.panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:1.4rem 1.6rem;
-         margin-bottom:1.1rem; text-align:left; }
-.panel h2 { font-size:.95rem; margin:0 0 .9rem; }
-input[type=text], textarea, select { width:100%; border:1px solid var(--line); border-radius:10px;
-        padding:.6rem .8rem; font-size:.95rem; font-family:inherit; background:#fff; }
-textarea { resize:vertical; }
-label { display:block; font-size:.8rem; color:var(--muted); margin:.9rem 0 .3rem; font-weight:600; }
+.pagehead { background:var(--panel); border-bottom:1px solid var(--line); padding:1.1rem 2.2rem .0; }
+.pagehead .row1 { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+.pagehead h1 { font-size:1.15rem; margin:0; font-weight:650; }
+.pagehead .sub { color:var(--muted); font-size:.82rem; margin-top:.15rem; }
+.tabs { display:flex; gap:1.4rem; margin-top:.9rem; }
+.tabs a { text-decoration:none; color:var(--muted); font-size:.88rem; font-weight:550;
+        padding:.45rem 2px .55rem; border-bottom:2px solid transparent; }
+.tabs a.on { color:var(--text); border-bottom-color:var(--text); }
+.wrap { max-width:1080px; margin:0 auto; padding:1.6rem 2.2rem 4rem; }
+.wrap.narrow { max-width:720px; }
+.hero { text-align:center; margin:11vh auto 0; }
+.hero h1 { font-size:1.75rem; font-weight:650; margin:0 0 .45rem; }
+.hero p { color:var(--muted); margin:0 0 1.8rem; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:14px;
+         padding:1.25rem 1.5rem; margin-bottom:1rem; text-align:left; }
+.panel h2 { font-size:.8rem; margin:0 0 .9rem; text-transform:uppercase; letter-spacing:.6px;
+         color:var(--muted); font-weight:650; }
+input[type=text], textarea, select { width:100%; border:1px solid var(--line); border-radius:9px;
+        padding:.55rem .75rem; font-size:.92rem; font-family:inherit; background:#fff; }
+label { display:block; font-size:.78rem; color:var(--muted); margin:1rem 0 .3rem; font-weight:600; }
 label:first-child { margin-top:0; }
-.drop { border:1.5px dashed #c9c9cf; border-radius:12px; padding:1.2rem; text-align:center;
-        color:var(--muted); background:#fcfcfc; font-size:.9rem; }
-.btn { display:inline-block; background:var(--text); color:#fff; border:none; border-radius:999px;
-       padding:.6rem 1.5rem; font-size:.95rem; font-weight:600; cursor:pointer; text-decoration:none; }
-.btn:hover { background:#333; }
-.btn:disabled { background:#d6d6db; cursor:not-allowed; }
-.btn.ghost { background:#fff; color:var(--text); border:1.5px solid var(--line); }
-.btn.small { padding:.35rem .9rem; font-size:.82rem; }
-.flow { display:flex; align-items:center; gap:.5rem; margin:1.4rem 0 1.8rem; flex-wrap:wrap; }
-.flow .s { display:flex; align-items:center; gap:.45rem; font-size:.88rem; color:var(--muted); }
-.flow .dot { width:22px; height:22px; border-radius:50%; border:1.5px solid #cfcfd6; display:flex;
-       align-items:center; justify-content:center; font-size:.72rem; color:var(--muted); background:#fff; }
+.drop { border:1.5px dashed #cfcfd6; border-radius:11px; padding:1.1rem; text-align:center;
+        color:var(--muted); background:#fcfcfd; font-size:.88rem; }
+.btn { display:inline-block; background:var(--text); color:#fff; border:none; border-radius:9px;
+       padding:.58rem 1.35rem; font-size:.92rem; font-weight:600; cursor:pointer; text-decoration:none; }
+.btn:hover { background:#2c2c31; }
+.btn:disabled { background:#d8d8dd; cursor:not-allowed; }
+.btn.ghost { background:#fff; color:var(--text); border:1px solid var(--line); }
+.btn.small { padding:.34rem .8rem; font-size:.8rem; }
+.flow { display:flex; align-items:center; gap:.55rem; margin:.2rem 0 1.2rem; flex-wrap:wrap; }
+.flow .s { display:flex; align-items:center; gap:.45rem; font-size:.85rem; color:var(--muted); }
+.flow .dot { width:20px; height:20px; border-radius:50%; border:1.5px solid #cfcfd6; display:flex;
+       align-items:center; justify-content:center; font-size:.68rem; background:#fff; }
 .flow .s.done .dot { background:var(--green); border-color:var(--green); color:#fff; }
-.flow .s.done { color:var(--text); }
-.flow .s.active { color:var(--text); font-weight:600; }
-.flow .s.active .dot { border-color:var(--text); color:var(--text); }
-.flow .sep { flex:0 0 26px; height:1.5px; background:var(--line); }
-table { border-collapse:collapse; width:100%; }
-th,td { border-bottom:1px solid #f95; border-bottom:1px solid var(--line); padding:8px 10px;
-        text-align:left; vertical-align:top; font-size:.9rem; }
-th { color:var(--muted); font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.4px; }
-a { color:inherit; }
-.kpis { display:flex; gap:1.6rem; flex-wrap:wrap; }
-.kpi b { font-size:1.35rem; display:block; font-weight:650; }
-.kpi span { font-size:.73rem; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
-.bar { background:#efeff2; border-radius:6px; height:7px; overflow:hidden; margin-top:5px; min-width:120px; }
+.flow .s.done, .flow .s.active { color:var(--text); }
+.flow .s.active { font-weight:650; }
+.flow .s.active .dot { border-color:var(--text); }
+.flow .sep { width:22px; height:1.5px; background:var(--line); }
+table { border-collapse:collapse; width:100%; background:var(--panel); }
+th,td { border-bottom:1px solid var(--line); padding:10px 12px; text-align:left; vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:.72rem; text-transform:uppercase;
+     letter-spacing:.6px; position:sticky; top:0; background:var(--panel); z-index:2; }
+tr:hover td { background:#fcfcfd; }
+tr.group td { background:var(--soft); font-weight:700; font-size:.8rem; letter-spacing:.5px;
+     color:#5a5a63; padding:6px 12px; position:sticky; top:37px; z-index:1; }
+.chip { display:inline-block; border-radius:999px; padding:2px 10px; font-size:.72rem; font-weight:600; }
+.chip.type { background:var(--blue-bg); color:var(--blue); }
+.chip.default { background:var(--green-bg); color:var(--green); }
+.chip.secondary { background:var(--soft); color:#5a5a63; }
+.chip.review { background:var(--amber-bg); color:var(--amber); }
+.chip.rejected { background:var(--red-bg); color:var(--red); text-decoration:line-through; }
+.chip.ok { background:var(--green-bg); color:var(--green); }
+.chip.warn { background:var(--amber-bg); color:var(--amber); }
+.chip.bad { background:var(--red-bg); color:var(--red); }
+td.date { white-space:nowrap; font-weight:650; width:110px; }
+td.date span { display:block; color:var(--muted); font-weight:400; font-size:.75rem; }
+td.ev p { margin:.35rem 0 .2rem; line-height:1.5; font-size:.93rem; max-width:520px; }
+td.ev blockquote { margin:6px 0 2px; padding:.55rem .8rem; background:var(--soft);
+     border-left:3px solid #d4d4da; border-radius:6px; color:#4c4c55; font-size:.86rem;
+     line-height:1.5; font-style:italic; }
+td.src { font-size:.83rem; color:#4c4c55; max-width:190px; }
+td.src b { display:block; font-weight:600; color:var(--text); overflow:hidden;
+     text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+.kpis { display:flex; gap:1.8rem; flex-wrap:wrap; }
+.kpi b { font-size:1.4rem; display:block; font-weight:650; }
+.kpi span { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.bar { background:#ededf0; border-radius:6px; height:6px; overflow:hidden; margin-top:5px; min-width:120px; }
 .bar>i { display:block; height:100%; background:var(--text); transition:width .6s; }
-.badge { display:inline-block; border-radius:6px; padding:1px 7px; font-size:.73rem; margin:1px 2px 1px 0; }
-.badge.native { background:#e6f4ef; color:var(--green); }
-.badge.ocr { background:#f8efe0; color:var(--amber); }
-.badge.none { background:#f8e7e7; color:var(--red); }
-ul.feed { list-style:none; margin:0; padding:0; max-height:250px; overflow-y:auto; font-size:.85rem; }
-ul.feed li { padding:.32rem 0; border-bottom:1px solid #f2f2f4; color:#3f3f46; }
-.pill { background:#f0f0f3; color:#52525b; border-radius:7px; padding:1px 8px; font-size:.73rem; margin-right:.4rem; }
-.err { background:#fdecec; border:1px solid #eeb8b8; color:#8c2f2f; border-radius:10px;
+.badge { display:inline-block; border-radius:6px; padding:1px 7px; font-size:.72rem; margin:1px 2px 1px 0; }
+.badge.native { background:var(--green-bg); color:var(--green); }
+.badge.ocr { background:var(--amber-bg); color:var(--amber); }
+.badge.none { background:var(--red-bg); color:var(--red); }
+ul.feed { list-style:none; margin:0; padding:0; max-height:250px; overflow-y:auto; font-size:.84rem; }
+ul.feed li { padding:.32rem 0; border-bottom:1px solid var(--soft); color:#4c4c55; }
+.pill { background:var(--soft); color:#5a5a63; border-radius:7px; padding:1px 8px; font-size:.72rem; margin-right:.4rem; }
+.err { background:var(--red-bg); border:1px solid #e5bcbc; color:#8c2f2f; border-radius:10px;
        padding:.7rem 1rem; margin-bottom:1rem; }
-.topline { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; }
-.topline h1 { font-size:1.25rem; margin:0; }
-.status-chip { font-size:.78rem; color:var(--muted); }
-blockquote { margin:4px 0; padding-left:8px; border-left:3px solid var(--line); color:#52525b; }
+.toolbar { display:flex; align-items:center; gap:.6rem; margin-bottom:1rem; flex-wrap:wrap; }
+.toolbar input[type=text] { max-width:280px; }
+.fchip { border:1px solid var(--line); background:#fff; border-radius:999px; padding:.35rem .95rem;
+       font-size:.82rem; cursor:pointer; font-weight:550; color:#5a5a63; }
+.fchip.on { background:var(--text); color:#fff; border-color:var(--text); }
+details.menu { position:relative; }
+details.menu summary { list-style:none; cursor:pointer; color:var(--muted); font-size:1.05rem;
+       padding:0 .4rem; border-radius:6px; }
+details.menu summary:hover { background:var(--soft); }
+details.menu .sheet { position:absolute; right:0; z-index:5; background:#fff; border:1px solid var(--line);
+       border-radius:10px; box-shadow:0 8px 22px rgba(15,15,25,.1); padding:.8rem; width:250px; }
+details.menu .sheet input, details.menu .sheet select { margin-bottom:.5rem; font-size:.84rem; }
+blockquote { margin:4px 0; }
+.rowamber td:first-child { box-shadow:inset 3px 0 0 var(--amber); }
 form.inline { display:inline; }
-details summary { cursor:pointer; color:var(--muted); font-size:.83rem; }
 .primary-zone { display:flex; align-items:center; gap:.9rem; flex-wrap:wrap; }
+.empty { color:var(--muted); text-align:center; padding:2.5rem 1rem; }
 """
+
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
 def _esc(value: Any) -> str:
     return html.escape(str(value if value is not None else ""))
+
+
+def _fmt_date(iso: str | None) -> tuple[str, str]:
+    if not iso:
+        return "Unresolved", ""
+    try:
+        d = date.fromisoformat(iso)
+        return f"{_MONTHS[d.month - 1]} {d.day}, {d.year}", iso
+    except ValueError:
+        return iso, ""
 
 
 def _slugify(name: str) -> str:
@@ -125,30 +180,21 @@ def create_app(workspace_root: Path) -> FastAPI:
     def paths_for(case_id: str) -> CasePaths:
         return CasePaths.for_case(workspace_root, case_id)
 
-    def list_cases() -> list[dict[str, Any]]:
-        cases: list[dict[str, Any]] = []
-        for case_dir in sorted(cases_dir.iterdir()) if cases_dir.is_dir() else []:
-            if (case_dir / "manifest.json").is_file():
-                manifest = load_manifest(CasePaths(root=case_dir))
-                cases.append(
-                    {
-                        "case_id": manifest.case_id,
-                        "status": manifest.run_status,
-                        "documents": len(manifest.documents),
-                        "pages": sum(d.page_count for d in manifest.documents),
-                        "created": manifest.created_at[:16].replace("T", " "),
-                    }
-                )
-        return cases
+    def list_cases() -> list[str]:
+        if not cases_dir.is_dir():
+            return []
+        return [
+            d.name for d in sorted(cases_dir.iterdir()) if (d / "manifest.json").is_file()
+        ]
 
     def _shell(title: str, body: str, active_case: str | None = None) -> HTMLResponse:
         items = "".join(
-            f"<a class='item{' active' if c['case_id'] == active_case else ''}' "
-            f"href='/case/{c['case_id']}'>{_esc(c['case_id'])}</a>"
-            for c in list_cases()
+            f"<a class='item{' active' if cid == active_case else ''}' "
+            f"href='/case/{cid}'>{_esc(cid)}</a>"
+            for cid in list_cases()
         )
         sidebar = (
-            "<aside><div class='brand'>Ask ALIE</div>"
+            "<aside><div class='brand'><i>A</i>Ask ALIE</div>"
             "<a class='item new' href='/'>+ New case</a>"
             "<div class='label'>Cases</div>"
             + (items or "<span class='item' style='color:var(--muted)'>No cases yet</span>")
@@ -159,6 +205,21 @@ def create_app(workspace_root: Path) -> FastAPI:
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<title>{_esc(title)}</title><style>{_STYLE}</style></head><body>"
             f"{sidebar}<div class='content'>{body}</div></body></html>"
+        )
+
+    def _case_head(case_id: str, tab: str, subtitle: str = "") -> str:
+        tabs = [("overview", "Overview", f"/case/{case_id}"),
+                ("documents", "Documents", f"/case/{case_id}/documents"),
+                ("chronology", "Chronology", f"/case/{case_id}/chronology")]
+        tab_html = "".join(
+            f"<a class='{'on' if key == tab else ''}' href='{href}'>{label}</a>"
+            for key, label, href in tabs
+        )
+        return (
+            f"<div class='pagehead'><div class='row1'><div><h1>{_esc(case_id)}</h1>"
+            f"<div class='sub'>{_esc(subtitle) or 'CNESST · SAAQ · IVAC medical-legal chronology'}</div></div>"
+            f"<span class='status-chip' id='status-chip' style='color:var(--muted);font-size:.82rem'></span></div>"
+            f"<div class='tabs'>{tab_html}</div></div>"
         )
 
     # ---------- pipelines (background threads) ----------
@@ -188,15 +249,14 @@ def create_app(workspace_root: Path) -> FastAPI:
         asyncio.run(runtime.run_orchestration(ctx, {}, progress=progress))
         export_all(paths)
 
-    # ---------- landing: new case ----------
+    # ---------- landing ----------
 
     @app.get("/", response_class=HTMLResponse)
     async def home() -> HTMLResponse:
         body = """
-<div class='wrap'><div class='hero'>
+<div class='wrap narrow'><div class='hero'>
   <h1>Ready to build a chronology?</h1>
-  <p>Upload the case file, tell ALIE what matters, and get a sourced medical-legal
-     chronology — CNESST · SAAQ · IVAC.</p>
+  <p>Upload the case file, tell ALIE what matters, and get a sourced medical-legal chronology.</p>
   <form method='post' action='/cases' enctype='multipart/form-data'>
     <div class='panel'>
       <label>Case name</label>
@@ -208,7 +268,7 @@ def create_app(workspace_root: Path) -> FastAPI:
       <textarea name='instructions' rows='3'
         placeholder='e.g. Focus on work capacity, the evolution of the lumbar condition, imaging findings and the alleged relapse.'></textarea>
     </div>
-    <button class='btn' type='submit' style='font-size:1.02rem;padding:.7rem 2rem'>
+    <button class='btn' type='submit' style='font-size:1rem;padding:.68rem 1.9rem'>
       Create case &amp; process documents</button>
   </form>
 </div></div>"""
@@ -233,7 +293,7 @@ def create_app(workspace_root: Path) -> FastAPI:
         jobs.start(case_id, "ingestion", lambda: ingestion_pipeline(input_dir, case_id, instructions))
         return RedirectResponse(url=f"/case/{case_id}", status_code=303)
 
-    # ---------- progress JSON (polled by the case screen) ----------
+    # ---------- progress JSON ----------
 
     @app.get("/case/{case_id}/progress")
     async def progress(case_id: str) -> dict[str, Any]:
@@ -316,7 +376,7 @@ def create_app(workspace_root: Path) -> FastAPI:
         state["activity"] = list(reversed(activity))
         return state
 
-    # ---------- case screen ----------
+    # ---------- overview tab ----------
 
     @app.get("/case/{case_id}", response_class=HTMLResponse)
     async def case_screen(case_id: str) -> HTMLResponse:
@@ -333,11 +393,8 @@ def create_app(workspace_root: Path) -> FastAPI:
                 )
             server_activity = "".join(reversed(items))
 
-        body = f"""
+        body = _case_head(case_id, "overview") + f"""
 <div class='wrap'>
-  <div class='topline'><h1>{_esc(case_id)}</h1>
-    <span class='status-chip' id='status-chip'></span></div>
-
   <div class='flow'>
     <div class='s done' id='f-upload'><div class='dot'>✓</div>Upload</div><div class='sep'></div>
     <div class='s' id='f-process'><div class='dot'>2</div>Process documents</div><div class='sep'></div>
@@ -357,8 +414,8 @@ def create_app(workspace_root: Path) -> FastAPI:
         <button class='btn' type='submit' id='build-btn' disabled>Generate chronology</button>
       </form>
       <a class='btn ghost' id='review-link' style='display:none'
-         href='/case/{_esc(case_id)}/chronology'>Review chronology</a>
-      <span id='primary-note' style='color:var(--muted);font-size:.88rem'></span>
+         href='/case/{_esc(case_id)}/chronology'>Open chronology</a>
+      <span id='primary-note' style='color:var(--muted);font-size:.86rem'></span>
     </div>
   </div>
 
@@ -371,10 +428,8 @@ def create_app(workspace_root: Path) -> FastAPI:
       <div class='kpi'><b id='k-reports'>–</b><span>reports read</span></div>
       <div class='kpi'><b id='k-events'>–</b><span>events found</span></div>
     </div>
+    <div style='margin-top:.8rem' id='recent'></div>
   </div>
-
-  <div class='panel'><h2>Documents</h2><div id='docs'>Loading…</div>
-    <div style='margin-top:.7rem' id='recent'></div></div>
 
   <div class='panel'><h2>Activity</h2>
     <ul class='feed' id='feed'>{server_activity or "<li>Waiting…</li>"}</ul></div>
@@ -403,15 +458,6 @@ async function tick() {{
   el('k-unread').textContent = s.unreadable_done ?? '–';
   el('k-reports').textContent = (s.reports_read||0) + ' / ' + (s.report_count||0);
   el('k-events').textContent = s.candidate_count ?? '–';
-  el('docs').innerHTML = '<table><thead><tr><th>Document</th><th>Pages</th><th>Progress</th></tr></thead><tbody>' +
-    (s.documents||[]).map(d =>
-      '<tr><td>' + d.filename + '</td><td>' + d.pages_done + ' / ' + d.page_count + '</td>' +
-      "<td><div class='bar'><i style='width:" +
-      Math.round(100*d.pages_done/Math.max(d.page_count,1)) + "%'></i></div>" +
-      "<span class='badge native'>" + d.native + " native</span>" +
-      "<span class='badge ocr'>" + d.ocr + " OCR</span>" +
-      (d.unreadable ? "<span class='badge none'>" + d.unreadable + " unreadable</span>" : '') +
-      '</td></tr>').join('') + '</tbody></table>';
   el('recent').innerHTML = (s.recent_pages||[]).map(p => badge(p.method, p.flags) + ' ' + p.page_id).join(' &nbsp; ');
   el('feed').innerHTML = (s.activity||[]).map(a => {{
     const i = a.indexOf(' · ');
@@ -422,9 +468,9 @@ async function tick() {{
   const chrRun = s.job && s.job.status === 'running' && s.job.stage === 'chronology';
   const ready = s.ingest_done && s.tokenized;
   el('f-process').className = 's ' + (ready ? 'done' : (ingRun ? 'active' : ''));
-  el('f-generate').className = 's ' + (s.run_finished ? 'done' : (chrRun ? 'active' : (ready ? 'active' : '')));
+  el('f-generate').className = 's ' + (s.run_finished ? 'done' : ((chrRun || ready) ? 'active' : ''));
   el('f-review').className = 's ' + (s.run_finished ? 'active' : '');
-  el('status-chip').textContent = ingRun ? 'Processing documents — extracting text and running OCR…'
+  el('status-chip').textContent = ingRun ? 'Processing documents — extracting text, running OCR…'
       : chrRun ? 'Agents at work — segmenting, reading, checking gaps…'
       : s.run_finished ? 'Chronology ready for review'
       : ready ? 'Documents processed — ready to generate' : '';
@@ -432,12 +478,42 @@ async function tick() {{
   el('build-btn').textContent = chrRun ? 'Generating…' : 'Generate chronology';
   el('primary-note').textContent = ingRun ? 'You can generate the chronology once processing completes.'
       : chrRun ? 'This can take a while on large files — progress appears in Activity below.'
-      : s.run_finished ? 'Done — open the review screen.' : '';
+      : s.run_finished ? 'Done — open the chronology tab.' : '';
   el('review-link').style.display = s.run_finished ? 'inline-block' : 'none';
 }}
 tick(); setInterval(tick, 1500);
 </script>"""
         return _shell(f"{case_id} — Ask ALIE", body, active_case=case_id)
+
+    # ---------- documents tab ----------
+
+    @app.get("/case/{case_id}/documents", response_class=HTMLResponse)
+    async def documents_tab(case_id: str) -> HTMLResponse:
+        paths = paths_for(case_id)
+        rows = []
+        if paths.manifest.exists():
+            for doc in load_manifest(paths).documents:
+                records = load_page_records(paths, doc.document_id)
+                native = sum(1 for r in records if not r.flags and r.extraction_method == "native")
+                unreadable = sum(1 for r in records if r.flags)
+                ocr = len(records) - native - unreadable
+                pct = round(100 * len(records) / max(doc.page_count, 1))
+                rows.append(
+                    f"<tr><td><b>{_esc(doc.filename)}</b></td>"
+                    f"<td>{len(records)} / {doc.page_count}</td>"
+                    f"<td><div class='bar'><i style='width:{pct}%'></i></div>"
+                    f"<span class='badge native'>{native} native</span>"
+                    f"<span class='badge ocr'>{ocr} OCR</span>"
+                    + (f"<span class='badge none'>{unreadable} unreadable</span>" if unreadable else "")
+                    + "</td></tr>"
+                )
+        body = _case_head(case_id, "documents") + (
+            "<div class='wrap'><div class='panel' style='padding:0'>"
+            "<table><thead><tr><th>Document</th><th>Pages</th><th>Extraction</th></tr></thead><tbody>"
+            + ("".join(rows) or "<tr><td colspan='3' class='empty'>No documents.</td></tr>")
+            + "</tbody></table></div></div>"
+        )
+        return _shell(f"Documents — {case_id}", body, active_case=case_id)
 
     @app.post("/case/{case_id}/build")
     async def build(case_id: str, runtime: str = Form("claude")) -> RedirectResponse:
@@ -445,65 +521,118 @@ tick(); setInterval(tick, 1500);
         jobs.start(case_id, "chronology", lambda: chronology_pipeline(case_id, runtime_name))
         return RedirectResponse(url=f"/case/{case_id}", status_code=303)
 
-    # ---------- chronology review ----------
+    # ---------- chronology tab: the rich table ----------
 
-    def _actions_form(case_id: str, event_id: str) -> str:
+    def _actions_menu(case_id: str, event_id: str) -> str:
         options = "".join(f"<option value='{a}'>{a}</option>" for a in REVIEW_ACTIONS)
         return (
-            f"<form class='inline' method='post' action='/case/{case_id}/decision'>"
+            "<details class='menu'><summary>⋯</summary><div class='sheet'>"
+            f"<form method='post' action='/case/{case_id}/decision'>"
             f"<input type='hidden' name='event_id' value='{event_id}'>"
-            f"<select name='action' style='width:auto'>{options}</select> "
-            f"<input type='text' name='new_summary' placeholder='new summary (edit)' style='width:170px'> "
-            f"<input type='text' name='reason' placeholder='reason' style='width:110px'> "
-            f"<button class='btn small' type='submit'>apply</button></form>"
+            f"<select name='action'>{options}</select>"
+            f"<input type='text' name='new_summary' placeholder='new summary (for edit)'>"
+            f"<input type='text' name='reason' placeholder='reason'>"
+            f"<button class='btn small' type='submit'>Apply</button>"
+            "</form></div></details>"
         )
 
-    def _rows_table(case_id: str, rows: list[dict[str, Any]]) -> str:
-        if not rows:
-            return "<p style='color:var(--muted)'>No events.</p>"
-        parts = []
-        for row in rows:
-            quote = (
-                f"<details><summary>quote (p. {_esc(row['quote_page'])})</summary>"
-                f"<blockquote>{_esc(row['quote'])}</blockquote>"
-                f"<p>pass {row['pass_number']} · flags: {_esc(', '.join(row['flags']))}</p></details>"
-                if row["quote"]
-                else ""
-            )
-            parts.append(
-                "<tr>"
-                f"<td>{_esc(row['date'] or 'unresolved')}</td>"
-                f"<td>{_esc(row['event_type'])}</td>"
-                f"<td>{_esc(row['summary'])}{quote}</td>"
-                f"<td>{_esc(row['author'])}</td>"
-                f"<td>{_esc(row['report_id'])} p. {_esc(', '.join(str(p) for p in row['source_pages']))}</td>"
-                f"<td>{_esc(row['status'])}</td>"
-                f"<td>{_actions_form(case_id, row['event_id'])}</td>"
-                "</tr>"
-            )
-        return (
-            "<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Author</th>"
-            "<th>Source</th><th>Status</th><th>Actions</th></tr></thead><tbody>"
-            + "".join(parts)
-            + "</tbody></table>"
-        )
+    def _status_chip(row: dict[str, Any]) -> str:
+        if row["status"] == "rejected":
+            return "<span class='chip rejected'>rejected</span>"
+        queue_class = "default" if row["queue"] == "default" else "secondary"
+        queue_label = "main" if row["queue"] == "default" else row["queue"]
+        chips = f"<span class='chip {queue_class}'>{_esc(queue_label)}</span>"
+        if row["needs_review"]:
+            chips += " <span class='chip review'>needs review</span>"
+        if row["status"] not in ("candidate",):
+            chips += f" <span class='chip secondary'>{_esc(row['status'])}</span>"
+        return chips
 
     @app.get("/case/{case_id}/chronology", response_class=HTMLResponse)
     async def chronology(case_id: str) -> HTMLResponse:
-        queues = split_queues(build_rows(paths_for(case_id)))
-        body = (
-            f"<div class='wrap'>"
-            f"<div class='topline'><h1>Chronology — {_esc(case_id)}</h1>"
-            f"<form method='post' action='/case/{case_id}/export' class='inline'>"
-            f"<button class='btn ghost small' type='submit'>Export (JSON / CSV / HTML)</button></form></div>"
-            f"<div class='panel'><h2>Main timeline ({len(queues['default'])})</h2>"
-            + _rows_table(case_id, queues["default"])
-            + f"</div><div class='panel'><h2>Secondary queue ({len(queues['secondary'])})</h2>"
-            + _rows_table(case_id, queues["secondary"])
-            + f"</div><div class='panel'><h2>Unresolved / needs review ({len(queues['unresolved'])})</h2>"
-            + _rows_table(case_id, queues["unresolved"])
-            + "</div></div>"
+        rows = build_rows(paths_for(case_id))
+        queues = split_queues(rows)
+        review_ids = {r["event_id"] for r in queues["unresolved"]}
+
+        body_rows: list[str] = []
+        current_year = None
+        for row in rows:
+            year = (row["date"] or "")[:4] or "Undated"
+            if year != current_year:
+                current_year = year
+                body_rows.append(f"<tr class='group'><td colspan='6'>{_esc(year)}</td></tr>")
+            nice, iso = _fmt_date(row["date"])
+            quote = (
+                f"<details><summary>Source excerpt · p. {_esc(row['quote_page'])}</summary>"
+                f"<blockquote>{_esc(row['quote'])}</blockquote></details>"
+                if row["quote"]
+                else ""
+            )
+            pages = ", ".join(str(p) for p in row["source_pages"])
+            filters = " ".join(
+                [row["queue"], "review" if row["event_id"] in review_ids else "", row["status"]]
+            )
+            search_text = _esc(
+                f"{row['date']} {row['event_type']} {row['summary']} {row['author']} "
+                f"{row['source_document']}".lower()
+            )
+            amber = " rowamber" if row["needs_review"] and row["status"] != "rejected" else ""
+            body_rows.append(
+                f"<tr class='evrow{amber}' data-f='{filters}' data-s=\"{search_text}\">"
+                f"<td class='date'>{_esc(nice)}<span>{_esc(iso)}</span></td>"
+                f"<td class='ev'><span class='chip type'>{_esc(row['event_type'])}</span>"
+                f"<p>{_esc(row['summary'])}</p>{quote}</td>"
+                f"<td>{_esc(row['author'] or '—')}</td>"
+                f"<td class='src'><b title=\"{_esc(row['source_document'])}\">{_esc(row['source_document'])}</b>"
+                f"p. {_esc(pages or '—')}</td>"
+                f"<td>{_status_chip(row)}</td>"
+                f"<td>{_actions_menu(case_id, row['event_id'])}</td></tr>"
+            )
+
+        table = (
+            "<div class='panel' style='padding:0;overflow:visible'>"
+            "<table id='chrono'><thead><tr><th>Date</th><th>Event</th><th>Author</th>"
+            "<th>Source</th><th>Status</th><th></th></tr></thead><tbody>"
+            + "".join(body_rows)
+            + "</tbody></table></div>"
+            if rows
+            else "<div class='panel'><div class='empty'>No chronology yet — generate it from the Overview tab.</div></div>"
         )
+
+        body = _case_head(
+            case_id, "chronology",
+            f"{len(queues['default'])} main · {len(queues['secondary'])} secondary · "
+            f"{len(queues['unresolved'])} to review",
+        ) + f"""
+<div class='wrap'>
+  <div class='toolbar'>
+    <button class='fchip on' data-q='all'>All ({len(rows)})</button>
+    <button class='fchip' data-q='default'>Main timeline ({len(queues["default"])})</button>
+    <button class='fchip' data-q='secondary'>Secondary ({len(queues["secondary"])})</button>
+    <button class='fchip' data-q='review'>Needs review ({len(queues["unresolved"])})</button>
+    <input type='text' id='search' placeholder='Search events, sources, authors…'>
+    <span style='flex:1'></span>
+    <form method='post' action='/case/{_esc(case_id)}/export' class='inline'>
+      <button class='btn ghost small' type='submit'>Export CSV / HTML / JSON</button></form>
+  </div>
+  {table}
+</div>
+<script>
+let q = 'all';
+function apply() {{
+  const s = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('tr.evrow').forEach(tr => {{
+    const okQ = q === 'all' || tr.dataset.f.split(' ').includes(q);
+    const okS = !s || tr.dataset.s.includes(s);
+    tr.style.display = okQ && okS ? '' : 'none';
+  }});
+}}
+document.querySelectorAll('.fchip').forEach(b => b.addEventListener('click', () => {{
+  document.querySelectorAll('.fchip').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); q = b.dataset.q; apply();
+}}));
+document.getElementById('search')?.addEventListener('input', apply);
+</script>"""
         return _shell(f"Chronology — {case_id}", body, active_case=case_id)
 
     @app.post("/case/{case_id}/decision")
