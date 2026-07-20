@@ -8,9 +8,9 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] P0.2 Fixture generator — done
 
 ## Phase 1 — Workspace & models
-- [ ] P1.1 Core data models — todo
-- [ ] P1.2 Workspace layout — todo
-- [ ] P1.3 Run log — todo
+- [x] P1.1 Core data models — done
+- [x] P1.2 Workspace layout — done
+- [x] P1.3 Run log — done
 
 ## Phase 2 — Ingest
 - [ ] P2.1 Native extraction + quality — todo
@@ -56,5 +56,7 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 
 ## Iteration notes
 (append newest first: date, packet, what was done, test status, blockers)
+
+- 2026-07-20 — P1.1–P1.3 done. All Spec §11 Pydantic models (manifest, page, report unit, candidate event, task, curation, decision) with unknown-field tolerance; CasePaths tree per Spec §10; sha256-idempotent create_case_workspace; JsonlStore; log_action run log. 10 tests green, ruff clean.
 
 - 2026-07-20 — P0.1 + P0.2 done. Repo skeleton (pyproject, package layout per Spec §31 + llm/ and agents/runtime/ seams, CLI stubs, CLAUDE.md, .env.example), venv with dev deps, and synthetic French fixture PDFs (consultation, IRM, CNESST decision, blank/image-only/garbage pages). 4 tests green, ruff clean.
