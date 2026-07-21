@@ -102,10 +102,15 @@ class ClaudeModelClient:
             "no prose, no markdown fences:\n"
             + json.dumps(request["output_format"]["schema"], ensure_ascii=False)
         )
+        import asyncio
+
         result_text: str | None = None
-        async for message in query(prompt=full_prompt, options=options):
-            if isinstance(message, ResultMessage):
-                result_text = message.result
+        # hard ceiling so a hung CLI session fails into the retry ladder
+        # instead of stalling a whole pipeline
+        async with asyncio.timeout(600):
+            async for message in query(prompt=full_prompt, options=options):
+                if isinstance(message, ResultMessage):
+                    result_text = message.result
         if result_text is None:
             raise RuntimeError("Model returned no result message")
         payload = _extract_json(result_text)
