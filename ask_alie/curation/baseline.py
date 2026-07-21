@@ -8,6 +8,7 @@ BASELINE_NAME = "alie-legal-baseline-v1"
 
 MANDATORY_DEFAULT: frozenset[str] = frozenset(
     {
+        # legacy English taxonomy
         "accident",
         "emergency_visit",
         "imaging",
@@ -20,6 +21,21 @@ MANDATORY_DEFAULT: frozenset[str] = frozenset(
         "permanent_impairment",
         "relapse_recurrence",
         "administrative_decision",
+        # Cabinet-informed French taxonomy (master reader prompt)
+        "accident du travail",
+        "réclamation",
+        "imagerie",
+        "hospitalisation",
+        "chirurgie",
+        "arrêt de travail",
+        "retour au travail",
+        "assignation temporaire",
+        "atteinte permanente",
+        "limitations fonctionnelles",
+        "avis bem",
+        "décision cnesst",
+        "décision dra",
+        "décision tat",
     }
 )
 
@@ -28,5 +44,7 @@ LIKELY_SECONDARY: frozenset[str] = frozenset(
         "routine_prescription_renewal",
         "unchanged_followup",
         "duplicate_fax",
+        "correspondance",
+        "transmission",
     }
 )

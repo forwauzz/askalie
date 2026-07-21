@@ -9,6 +9,9 @@ applies_to:
   - cnesst_decision
   - tribunal_decision
   - review_decision
+  - décision cnesst
+  - décision dra
+  - décision tat
 ---
 
 # Objective
