@@ -77,8 +77,27 @@ def evaluate_case(paths: CasePaths, gold_path: Path) -> MetricsReport:
     gold_events = load_gold(gold_path)
     candidates = CandidateStore(paths).read_all()
     matches = match_events(gold_events, candidates)
+
+    # apply human verdicts (Spec §28.3) — they always override machine scoring
+    from ask_alie.evals.adjudicate import load_adjudications
+
+    verdicts = load_adjudications(paths)
+    for match in matches:
+        verdict = verdicts.get(match.gold_event_id)
+        if verdict is None or not match.needs_adjudication:
+            continue
+        match.needs_adjudication = False
+        match.reviewer = verdict.reviewer
+        if verdict.verdict == "match":
+            match.meaning_match = "full"
+        else:
+            match.meaning_match = "none"
+            match.candidate_event_id = None
+
     assignments = JsonlStore(paths.curation_file, CurationAssignment).read_all()
     report = compute_metrics(gold_events, candidates, matches, assignments)
+    paths.eval_dir.mkdir(parents=True, exist_ok=True)
+    (paths.eval_dir / "gold_path.txt").write_text(str(gold_path), encoding="utf-8")
 
     paths.eval_dir.mkdir(parents=True, exist_ok=True)
     matches_store: JsonlStore[MatchRecord] = JsonlStore(

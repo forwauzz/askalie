@@ -217,6 +217,13 @@ def create_app(workspace_root: Path) -> FastAPI:
         tabs = [("overview", "Overview", f"/case/{case_id}"),
                 ("documents", "Documents", f"/case/{case_id}/documents"),
                 ("chronology", "Chronology", f"/case/{case_id}/chronology")]
+        from ask_alie.evals.adjudicate import pending_adjudications
+
+        pending_count = len(pending_adjudications(paths_for(case_id)))
+        if pending_count or tab == "adjudicate":
+            tabs.append(
+                ("adjudicate", f"Adjudication ({pending_count})", f"/case/{case_id}/adjudicate")
+            )
         tab_html = "".join(
             f"<a class='{'on' if key == tab else ''}' href='{href}'>{label}</a>"
             for key, label, href in tabs
@@ -758,6 +765,67 @@ document.querySelectorAll('.fchip').forEach(b => b.addEventListener('click', () 
 document.getElementById('search')?.addEventListener('input', apply);
 </script>"""
         return _shell(f"Chronology — {case_id}", body, active_case=case_id)
+
+    @app.get("/case/{case_id}/adjudicate", response_class=HTMLResponse)
+    async def adjudicate_page(case_id: str) -> HTMLResponse:
+        from ask_alie.evals.adjudicate import load_adjudications, pending_adjudications
+
+        pending = pending_adjudications(paths_for(case_id))
+        done = len(load_adjudications(paths_for(case_id)))
+        cards = []
+        for item in pending:
+            pages = ", ".join(str(p) for p in item["candidate_pages"]) or "—"
+            quote = (
+                f"<blockquote>{_esc(item['candidate_quote'])}</blockquote>"
+                if item["candidate_quote"]
+                else ""
+            )
+            cards.append(f"""
+<div class='panel'>
+  <div style='display:flex;gap:1.5rem;flex-wrap:wrap'>
+    <div style='flex:1;min-width:280px'>
+      <h2>Reference chronology says</h2>
+      <p style='font-weight:650'>{_esc(item["date"])}</p>
+      <p>{_esc(item["gold_description"])}</p>
+    </div>
+    <div style='flex:1;min-width:280px'>
+      <h2>ALIE extracted (same date)</h2>
+      <p>{_esc(item["candidate_summary"])}</p>{quote}
+      <p style='color:var(--muted);font-size:.82rem'>{_esc(item["candidate_source"])} · p. {_esc(pages)}</p>
+    </div>
+  </div>
+  <div style='margin-top:.8rem'>
+    <form class='inline' method='post' action='/case/{_esc(case_id)}/adjudicate'>
+      <input type='hidden' name='gold_event_id' value='{_esc(item["gold_event_id"])}'>
+      <button class='btn small' name='verdict' value='match' type='submit'>Same event — match</button>
+      <button class='btn ghost small' name='verdict' value='no_match' type='submit'>Different — not a match</button>
+    </form>
+  </div>
+</div>""")
+        intro = (
+            f"<p style='color:var(--muted)'>These pairs share a date but the wording differs "
+            f"enough that a human must decide. Your verdicts update the evaluation instantly. "
+            f"{done} decided so far.</p>"
+        )
+        body = _case_head(case_id, "adjudicate") + "<div class='wrap'>" + intro + (
+            "".join(cards)
+            or "<div class='panel'><div class='empty'>Nothing left to adjudicate. 🎉</div></div>"
+        ) + "</div>"
+        return _shell(f"Adjudication — {case_id}", body, active_case=case_id)
+
+    @app.post("/case/{case_id}/adjudicate")
+    async def adjudicate_post(
+        case_id: str, gold_event_id: str = Form(...), verdict: str = Form(...)
+    ) -> RedirectResponse:
+        from ask_alie.evals.adjudicate import record_adjudication, stored_gold_path
+        from ask_alie.evals.metrics import evaluate_case
+
+        paths = paths_for(case_id)
+        record_adjudication(paths, gold_event_id, verdict, reviewer="uzziel")
+        gold_path = stored_gold_path(paths)
+        if gold_path:
+            evaluate_case(paths, gold_path)  # metrics refresh with the human verdict
+        return RedirectResponse(url=f"/case/{case_id}/adjudicate", status_code=303)
 
     @app.post("/case/{case_id}/decision")
     async def decision(

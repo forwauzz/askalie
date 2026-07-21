@@ -141,6 +141,34 @@ def test_gold_loader_accepts_chrono_lab_format(tmp_path: Path) -> None:
     assert "Consultation" in event.description and "lombalgie" in event.description
 
 
+def test_adjudication_overrides_machine_score(tmp_path: Path) -> None:
+    from ask_alie.evals.adjudicate import pending_adjudications, record_adjudication
+
+    paths = CasePaths.for_case(tmp_path, "case_adj")
+    paths.create_tree()
+    CandidateStore(paths).append_events(CANDIDATES)
+    gold_path = tmp_path / "gold_events.jsonl"
+    JsonlStore(gold_path, GoldEvent).append_many(GOLD)
+
+    first = evaluate_case(paths, gold_path)
+    assert first.gold_captured == 1 and first.uncertain_matches == 1
+
+    pending = pending_adjudications(paths)
+    assert len(pending) == 1 and pending[0]["gold_event_id"] == "g3"
+    assert "CNESST" in pending[0]["candidate_summary"]
+
+    record_adjudication(paths, "g3", "match", reviewer="uzziel")
+    confirmed = evaluate_case(paths, gold_path)
+    assert confirmed.gold_captured == 2  # human verdict promoted the partial
+    assert confirmed.uncertain_matches == 0
+    assert pending_adjudications(paths) == []
+
+    # a no_match verdict would demote instead — and never resurrects as pending
+    record_adjudication(paths, "g3", "no_match", reviewer="uzziel")
+    demoted = evaluate_case(paths, gold_path)
+    assert demoted.gold_captured == 1
+
+
 def test_gold_isolation_guard() -> None:
     """Spec §28.2: only the eval layer may import the gold loader."""
     package = Path(__file__).resolve().parents[2] / "ask_alie"
