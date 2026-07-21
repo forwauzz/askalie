@@ -49,8 +49,8 @@ The loop updates this file every iteration. A packet is `done` only when its PLA
 - [x] PL.1 doctor command — done
 - [x] PL.2 Experiment 0: Case 1 ingest inventory — done (2026-07-20: 363 pages / 13 docs; 115 native, 228 OCR fra+eng, 20 empty/unreadable; 280.8s. Tokenize: 174 unique dates, 123 unique entities)
 - [x] PL.3+PL.4 Experiments 1&2 combined (Scout units + reader baseline) — done 2026-07-20. Prior units were document-level (unusable), so baseline ran on Scout segmentation: 230 units + 12 uncertain ranges. 230/230 readers succeeded, 837 candidates, 595 with restored dates. **Machine-scored: 39/74 gold full-captured + 18 partial (awaiting human adjudication) + 11 wrong-date; only 6 gold entirely missed.** Prior system reference: 50/74 human-adjudicated, 187 rows. Live-path fixes en route: schema-in-prompt, max_turns, bracket-tolerant date restoration, containment-based matcher.
-- [ ] PL.5 Experiment 3: adaptive orchestrator — BLOCKED-ON-USER
-- [ ] PL.6 Experiment 4: curator metrics — BLOCKED-ON-USER
+- [x] PL.5 Experiment 3 (gap loop) — done 2026-07-20. Gap Agent produced 19 intelligent targeted tasks over 2 iterations (zero-event rereads, uncited-token clusters, missing operative report search, resegmentation); rereads added 60 candidates but 0 converted new gold (search/resegment tasks that target the 6 true misses were left pending — executor only automates rereads/inspects). Verdict: mechanism validated, value unproven. Pipeline lesson: added 10-min call timeout after a hung session stalled 2.5h.
+- [x] PL.6 Experiment 4 (curator) — done 2026-07-20. Batched curation (100-event chunks): 430 default / 467 secondary, 129 duplicates linked, 33 baseline forced-default, 0 dropped. 31/39 captured gold in default, 8 in secondary (review burden halved vs 897 raw; gold-in-secondary needs threshold review).
 - [ ] PL.7 Stability + Experiments 5–6 — BLOCKED-ON-USER (go/no-go review first)
 
 ## Iteration notes
