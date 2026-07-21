@@ -60,17 +60,31 @@ async def run_curator(
         }
         for e in events
     ]
-    prompt = (
-        "Assign each candidate event to the 'default' or 'secondary' queue.\n"
-        "Candidates (JSON):\n" + json.dumps(summaries, ensure_ascii=False, indent=1)
-    )
+
+    # batched curation: one call cannot emit hundreds of assignments before
+    # the client timeout, so chunk and merge (bounded parallelism)
+    import asyncio
+
     from ask_alie import config
 
-    result = await client.structured(
-        prompt, CuratorResult, system=curator_system_prompt(), model=config.agent_model()
-    )
+    batch_size = 100
+    system = curator_system_prompt()
+    semaphore = asyncio.Semaphore(3)
 
-    drafts = {d.event_id: d for d in result.assignments}
+    async def curate_batch(batch: list[dict]) -> CuratorResult:
+        async with semaphore:
+            prompt = (
+                "Assign each candidate event to the 'default' or 'secondary' queue.\n"
+                "Candidates (JSON):\n" + json.dumps(batch, ensure_ascii=False, indent=1)
+            )
+            return await client.structured(
+                prompt, CuratorResult, system=system, model=config.agent_model()
+            )
+
+    batches = [summaries[i : i + batch_size] for i in range(0, len(summaries), batch_size)]
+    results = await asyncio.gather(*(curate_batch(batch) for batch in batches))
+
+    drafts = {d.event_id: d for result in results for d in result.assignments}
     by_id = {e.event_id: e for e in events}
     assignments: list[CurationAssignment] = []
     forced_default = 0
