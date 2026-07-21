@@ -802,16 +802,42 @@ document.getElementById('search')?.addEventListener('input', apply);
     </form>
   </div>
 </div>""")
+        job = jobs.get(case_id)
+        judging = job is not None and job.status == "running" and job.stage == "judging"
+        judge_button = (
+            "<p style='color:var(--muted)'>ALIE judge is working through the pairs — refresh "
+            "to see the list shrink.</p>"
+            if judging
+            else (
+                f"<form class='inline' method='post' action='/case/{_esc(case_id)}/adjudicate/judge'>"
+                f"<button class='btn ghost small' type='submit'>Let ALIE judge these "
+                f"({len(pending)}) — you can override after</button></form>"
+                if pending
+                else ""
+            )
+        )
         intro = (
             f"<p style='color:var(--muted)'>These pairs share a date but the wording differs "
-            f"enough that a human must decide. Your verdicts update the evaluation instantly. "
-            f"{done} decided so far.</p>"
+            f"enough that a judgment call is needed. Verdicts update the evaluation instantly; "
+            f"human decisions always override the LLM judge. {done} decided so far.</p>"
+            + judge_button
         )
         body = _case_head(case_id, "adjudicate") + "<div class='wrap'>" + intro + (
             "".join(cards)
             or "<div class='panel'><div class='empty'>Nothing left to adjudicate. 🎉</div></div>"
         ) + "</div>"
         return _shell(f"Adjudication — {case_id}", body, active_case=case_id)
+
+    @app.post("/case/{case_id}/adjudicate/judge")
+    async def adjudicate_judge(case_id: str) -> RedirectResponse:
+        def run_judge() -> None:
+            from ask_alie.evals.judge import judge_pending
+            from ask_alie.llm.client import ClaudeModelClient
+
+            asyncio.run(judge_pending(paths_for(case_id), ClaudeModelClient()))
+
+        jobs.start(case_id, "judging", run_judge)
+        return RedirectResponse(url=f"/case/{case_id}/adjudicate", status_code=303)
 
     @app.post("/case/{case_id}/adjudicate")
     async def adjudicate_post(

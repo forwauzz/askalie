@@ -169,6 +169,42 @@ def test_adjudication_overrides_machine_score(tmp_path: Path) -> None:
     assert demoted.gold_captured == 1
 
 
+def test_llm_judge_adjudicates_pending(tmp_path: Path) -> None:
+    import asyncio
+
+    from ask_alie.evals.adjudicate import load_adjudications, pending_adjudications
+    from ask_alie.evals.judge import JudgeVerdict, judge_pending
+    from ask_alie.llm.client import MockModelClient
+
+    paths = CasePaths.for_case(tmp_path, "case_judge")
+    paths.create_tree()
+    CandidateStore(paths).append_events(CANDIDATES)
+    gold_path = tmp_path / "gold_events.jsonl"
+    JsonlStore(gold_path, GoldEvent).append_many(GOLD)
+    evaluate_case(paths, gold_path)
+    assert len(pending_adjudications(paths)) == 1  # g3
+
+    def handler(prompt: str, schema: type) -> JudgeVerdict:
+        assert "Entry A" in prompt and "Entry B" in prompt
+        return JudgeVerdict(same_event=True, confidence="high", reason="same decision")
+
+    result = asyncio.run(judge_pending(paths, MockModelClient(handler)))
+    assert result == {"judged": 1, "match": 1, "no_match": 0}
+    assert pending_adjudications(paths) == []
+    assert load_adjudications(paths)["g3"].reviewer == "llm-judge"
+
+    # metrics were refreshed with the judge verdict applied
+    report = evaluate_case(paths, gold_path)
+    assert report.gold_captured == 2 and report.uncertain_matches == 0
+
+    # a later human verdict overrides the judge
+    from ask_alie.evals.adjudicate import record_adjudication
+
+    record_adjudication(paths, "g3", "no_match", reviewer="uzziel")
+    assert load_adjudications(paths)["g3"].reviewer == "uzziel"
+    assert evaluate_case(paths, gold_path).gold_captured == 1
+
+
 def test_gold_isolation_guard() -> None:
     """Spec §28.2: only the eval layer may import the gold loader."""
     package = Path(__file__).resolve().parents[2] / "ask_alie"
