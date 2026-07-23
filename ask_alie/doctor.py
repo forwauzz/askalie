@@ -46,6 +46,21 @@ def run_checks() -> list[tuple[str, bool, str]]:
         )
     )
 
+    engine_mode = config.pdf_engine()
+    if engine_mode == "reducto":
+        has_key = bool(config.reducto_api_key())
+        checks.append(
+            (
+                "PDF engine (flagged)",
+                has_key,
+                "reducto - key set"
+                if has_key
+                else "reducto selected but REDUCTO_API_KEY missing - add it to .env",
+            )
+        )
+    else:
+        checks.append(("PDF engine", True, "local (native + Tesseract)"))
+
     tesseract = config.tesseract_cmd() or shutil.which("tesseract")
     checks.append(
         (

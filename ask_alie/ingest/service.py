@@ -21,17 +21,23 @@ class IngestSummary:
     total_pages: int = 0
     native_pages: int = 0
     ocr_pages: int = 0
+    reducto_pages: int = 0
     unreadable_pages: int = 0
     duration_seconds: float = 0.0
 
     def render(self) -> str:
-        return (
-            f"total pages      {self.total_pages}\n"
-            f"native usable    {self.native_pages}\n"
-            f"OCR required     {self.ocr_pages}\n"
-            f"empty/unreadable {self.unreadable_pages}\n"
-            f"ingest duration  {self.duration_seconds:.1f}s"
-        )
+        lines = [
+            f"total pages      {self.total_pages}",
+            f"native usable    {self.native_pages}",
+            f"OCR required     {self.ocr_pages}",
+        ]
+        if self.reducto_pages:
+            lines.append(f"reducto parsed   {self.reducto_pages}")
+        lines += [
+            f"empty/unreadable {self.unreadable_pages}",
+            f"ingest duration  {self.duration_seconds:.1f}s",
+        ]
+        return "\n".join(lines)
 
 
 def ingest_case(
@@ -39,6 +45,8 @@ def ingest_case(
     case_id: str,
     workspace_root: Path,
     ocr_engine: OcrEngine | None = None,
+    pdf_engine: str | None = None,
+    reducto_engine: object | None = None,
 ) -> tuple[CaseManifest, IngestSummary]:
     started = time.monotonic()
     engine = ocr_engine or default_engine()
@@ -46,10 +54,34 @@ def ingest_case(
     paths = CasePaths.for_case(workspace_root, case_id)
     summary = IngestSummary()
 
+    from ask_alie import config
+
+    engine_mode = (pdf_engine or config.pdf_engine()).lower()
+    if engine_mode == "reducto" and reducto_engine is None:
+        from ask_alie.ingest.reducto import ReductoEngine
+
+        reducto_engine = ReductoEngine.from_config()
+
     for doc in manifest.documents:
         pdf_path = paths.source_original / f"{doc.document_id}.pdf"
         page_dir = paths.page_dir(doc.document_id)
         page_dir.mkdir(parents=True, exist_ok=True)
+
+        reducto_map: dict[int, str] = {}
+        if engine_mode == "reducto" and not doc.duplicate_of:
+            from ask_alie.ingest.reducto import ReductoError
+
+            try:
+                reducto_map = {
+                    p.page_number: p.text for p in reducto_engine.parse_pdf(pdf_path)
+                }
+            except ReductoError as exc:
+                log_action(
+                    paths, actor="ingest", action="reducto_failed",
+                    targets=[doc.document_id],
+                    reason=str(exc)[:300],
+                    result={"fallback": "local pipeline"},
+                )
 
         for native in extract_native_text(pdf_path):
             summary.total_pages += 1
@@ -58,10 +90,19 @@ def ingest_case(
             flags: list[str] = []
             quality = score_text(native.text)
 
-            if quality.usable:
+            reducto_text = reducto_map.get(number, "")
+            reducto_quality = score_text(reducto_text) if reducto_text else None
+            if reducto_quality and reducto_quality.usable:
+                text, method, quality = reducto_text, "reducto", reducto_quality
+                summary.reducto_pages += 1
+            elif quality.usable:
+                if engine_mode == "reducto":
+                    flags.append("reducto_fallback")
                 text, method = native.text, "native"
                 summary.native_pages += 1
             else:
+                if engine_mode == "reducto":
+                    flags.append("reducto_fallback")
                 png_path = render_page_png(pdf_path, number, page_dir / f"{stem}.png")
                 if engine.available:
                     try:
